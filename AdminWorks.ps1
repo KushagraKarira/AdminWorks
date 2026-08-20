@@ -64,6 +64,38 @@ $GlobalFont = "Segoe UI Variable Display"
 $CheckFont = New-Object System.Drawing.Font($GlobalFont, 10)
 if ($CheckFont.Name -ne $GlobalFont) { $GlobalFont = "Segoe UI" }
 
+# --- [Universal UI Glyphs & Icons] ---
+$UI = @{
+    Bullet     = [char]0x2022                         # •
+    Dot        = [char]0x25CF                         # ●
+    Close      = [char]0x2715                         # ✕
+    Maximize   = [char]0x25A1                         # ⬜
+    Restore    = [char]0x274F                         # ❐
+    Minimize   = [char]0x2014                         # —
+    ArrowDown  = [char]0x25BC                         # ▼
+    ArrowUp    = [char]0x25B2                         # ▲
+    Search     = [char]::ConvertFromUtf32(0x1F50D)    # 🔍
+    
+    # Category / Tab Icons
+    Star       = [char]0x2605                         # ★
+    Gear       = [char]0x2699                         # ⚙
+    Bolt       = [char]0x26A1                         # ⚡
+    Globe      = [char]::ConvertFromUtf32(0x1F310)    # 🌐
+    Lock       = [char]::ConvertFromUtf32(0x1F512)    # 🔒
+    Folder     = [char]::ConvertFromUtf32(0x1F4C1)    # 📁
+    Laptop     = [char]::ConvertFromUtf32(0x1F4BB)    # 💻
+    Package    = [char]::ConvertFromUtf32(0x1F4E6)    # 📦
+    Wrench     = [char]::ConvertFromUtf32(0x1F6E0)    # 🛠
+    
+    # Preset Profile Icons
+    Sparkle    = [char]0x2726                         # ✦
+    Shield     = [char]::ConvertFromUtf32(0x1F6E1)    # 🛡
+    Building   = [char]::ConvertFromUtf32(0x1F3E2)    # 🏢
+    Refresh    = [char]::ConvertFromUtf32(0x1F504)    # 🔄
+    Undo       = [char]0x21BA                         # ↺
+}
+$SearchPlaceholder = "$($UI.Search) Search tools, tweaks & features..."
+
 # Backup Directory Setup
 $script:BackupDir = "$env:LOCALAPPDATA\AdminWorks\Backups"
 if (-not (Test-Path $script:BackupDir)) { New-Item -ItemType Directory -Path $script:BackupDir -Force | Out-Null }
@@ -108,13 +140,13 @@ $Form.Controls.Add($Header)
 
 # Brand Label
 $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
-    Text      = "[char]0x26A1 ADMINWORKS"
+    Text      = "$($UI.Bolt) ADMINWORKS"
     Location  = New-Object System.Drawing.Point(22, 14); AutoSize = $true
     ForeColor = $script:Theme.TextMain
     Font      = New-Object System.Drawing.Font($GlobalFont, 12.5, [System.Drawing.FontStyle]::Bold)
 }
 $TitleSub = New-Object System.Windows.Forms.Label -Property @{
-    Text      = "ENTERPRISE SUITE v4.2  [char]0x2022  BY KUSHAGRA KARIRA"
+    Text      = "ENTERPRISE SUITE v4.2  $($UI.Bullet)  BY KUSHAGRA KARIRA"
     Location  = New-Object System.Drawing.Point(24, 40); AutoSize = $true
     ForeColor = $script:Theme.AccentGlow
     Font      = New-Object System.Drawing.Font($GlobalFont, 7.5, [System.Drawing.FontStyle]::Bold)
@@ -142,7 +174,7 @@ try {
 
 $OSInfo = (Get-CimInstance Win32_OperatingSystem)
 $SysBadge = New-Object System.Windows.Forms.Label -Property @{
-    Text      = "$($env:COMPUTERNAME)  [char]0x2022  IP: $LocalIP  [char]0x2022  $($OSInfo.Caption)"
+    Text      = "$($env:COMPUTERNAME)  $($UI.Bullet)  IP: $LocalIP  $($UI.Bullet)  $($OSInfo.Caption)"
     Location  = New-Object System.Drawing.Point(260, 26); Size = New-Object System.Drawing.Size(380, 20)
     ForeColor = $script:Theme.TextMuted; Font = New-Object System.Drawing.Font($GlobalFont, 8.5)
 }
@@ -156,10 +188,10 @@ $SearchPanel = New-Object System.Windows.Forms.Panel -Property @{
 $SearchBox = New-Object System.Windows.Forms.TextBox -Property @{
     BorderStyle = "None"; BackColor = $script:Theme.Sidebar; ForeColor = $script:Theme.TextMain
     Font = New-Object System.Drawing.Font($GlobalFont, 9.5); Location = New-Object System.Drawing.Point(12, 8)
-    Width = 295; Text = "[char]::ConvertFromUtf32(0x1F50D) Search tools, tweaks & features..."
+    Width = 295; Text = "$($SearchPlaceholder) Search tools, tweaks & features..."
 }
-$SearchBox.Add_GotFocus({ if ($this.Text -eq "[char]::ConvertFromUtf32(0x1F50D) Search tools, tweaks & features...") { $this.Text = ""; $this.ForeColor = $script:Theme.TextMain } })
-$SearchBox.Add_LostFocus({ if ([string]::IsNullOrWhiteSpace($this.Text)) { $this.Text = "🔍 Search tools, tweaks & features..."; $this.ForeColor = $script:Theme.TextSubtle } })
+$SearchBox.Add_GotFocus({ if ($this.Text -eq $SearchPlaceholder) { $this.Text = ""; $this.ForeColor = $script:Theme.TextMain } })
+$SearchBox.Add_LostFocus({ if ([string]::IsNullOrWhiteSpace($this.Text)) { $this.Text = $SearchPlaceholder; $this.ForeColor = $script:Theme.TextSubtle } })
 $SearchPanel.Controls.Add($SearchBox)
 $Header.Controls.Add($SearchPanel)
 
@@ -181,17 +213,17 @@ function New-WindowBtn($Text, $X, $HoverColor, $Action) {
     $CtrlBox.Controls.Add($B)
     return $B
 }
-$BtnClose = New-WindowBtn "[char]0x2715" 90 $script:Theme.Danger { $Form.Close() }
-$BtnMax   = New-WindowBtn "[char]0x25A1" 46 $script:Theme.CardHover { 
+$BtnClose = New-WindowBtn $UI.Close 90 $script:Theme.Danger { $Form.Close() }
+$BtnMax   = New-WindowBtn $UI.Maximize 46 $script:Theme.CardHover { 
     if ($Form.WindowState -eq "Maximized") { 
         $Form.WindowState = "Normal"
-        $this.Text = "[char]0x25A1"
+        $this.Text = $UI.Maximize
     } else { 
         $Form.WindowState = "Maximized"
-        $this.Text = "[char]0x274F"
+        $this.Text = $UI.Restore
     } 
 }
-$BtnMin   = New-WindowBtn "—" 2 $script:Theme.CardHover { $Form.WindowState = "Minimized" }
+$BtnMin   = New-WindowBtn $UI.Minimize 2 $script:Theme.CardHover { $Form.WindowState = "Minimized" }
 
 # --- [Sidebar Navigation Container] ---
 $Sidebar = New-Object System.Windows.Forms.Panel -Property @{
@@ -215,7 +247,7 @@ $TermHeader = New-Object System.Windows.Forms.Panel -Property @{Dock="Top"; Heig
 $LogContainer.Controls.Add($TermHeader)
 
 $TermTitle = New-Object System.Windows.Forms.Label -Property @{
-    Text = "● CONSOLE OUTPUT"; Location = New-Object System.Drawing.Point(0, 6); AutoSize = $true
+    Text = "$($UI.Dot) CONSOLE OUTPUT"; Location = New-Object System.Drawing.Point(0, 6); AutoSize = $true
     ForeColor = $script:Theme.Success; Font = New-Object System.Drawing.Font($GlobalFont, 8, [System.Drawing.FontStyle]::Bold)
 }
 $TermHeader.Controls.Add($TermTitle)
@@ -255,7 +287,7 @@ function New-TermBtn($Text, $Action) {
 
 # Collapse/Expand Toggle
 $BtnToggleDrawer = New-Object System.Windows.Forms.Button -Property @{
-    Text = "▼ COLLAPSE"; Size = New-Object System.Drawing.Size(95, 24)
+    Text = "$($UI.ArrowDown) COLLAPSE"; Size = New-Object System.Drawing.Size(95, 24)
     FlatStyle = "Flat"; BackColor = $script:Theme.Card; ForeColor = $script:Theme.AccentGlow
     Font = New-Object System.Drawing.Font($GlobalFont, 7.5, [System.Drawing.FontStyle]::Bold)
     Margin = New-Object System.Windows.Forms.Padding(4, 2, 4, 2)
@@ -265,10 +297,10 @@ $BtnToggleDrawer.FlatAppearance.BorderSize = 0
 $BtnToggleDrawer.Add_Click({
     if ($LogContainer.Height -gt 40) {
         $LogContainer.Height = 36
-        $BtnToggleDrawer.Text = "▲ EXPAND"
+        $BtnToggleDrawer.Text = "$($UI.ArrowUp) EXPAND"
     } else {
         $LogContainer.Height = 200
-        $BtnToggleDrawer.Text = "▼ COLLAPSE"
+        $BtnToggleDrawer.Text = "$($UI.ArrowDown) COLLAPSE"
     }
 })
 
@@ -489,15 +521,15 @@ function New-TweakCard ($CategoryPanel, $Title, $CategoryTag, $Desc, $Action) {
 
 # --- [Sidebar Tabs Definition with Tested Universal Glyphs] ---
 $TabList = @(
-    @{ Id = "Presets";   Name = "$IconPresets  Preset Profiles"; Desc = "1-Click Optimization Profiles" },
-    @{ Id = "Maint";     Name = "$IconMaint  Maintenance";     Desc = "DISM, SFC, Component cleanup, Update fixes" },
-    @{ Id = "Perf";      Name = "$IconPerf  Performance";     Desc = "Power plans, CPU priority, latency & RAM" },
-    @{ Id = "Net";       Name = "$IconNet  Network & DNS";   Desc = "DNS benchmarks, Wi-Fi keys, TCP stack & ports" },
-    @{ Id = "Privacy";   Name = "$IconPrivacy  Privacy & Bloat"; Desc = "Telemetry removal, Bing, Copilot & Debloat" },
-    @{ Id = "Context";   Name = "$IconExplorer  Shell & Explorer";Desc = "Context menus, file extensions & UI tweaks" },
-    @{ Id = "Hardware";  Name = "$IconHardware  Hardware Audit";  Desc = "SMART drives, RAM banks, battery & GPU stats" },
-    @{ Id = "Apps";      Name = "$IconApps  Software Hub";    Desc = "Winget package updater & curated installer" },
-    @{ Id = "Admin";     Name = "$IconAdmin  Admin Utilities"; Desc = "GodMode, Windows tools hub & System Restore" }
+    @{ Id = "Presets";   Name = "$($UI.Star)  Preset Profiles"; Desc = "1-Click Optimization Profiles" },
+    @{ Id = "Maint";     Name = "$($UI.Gear)  Maintenance";     Desc = "DISM, SFC, Component cleanup, Update fixes" },
+    @{ Id = "Perf";      Name = "$($UI.Bolt)  Performance";     Desc = "Power plans, CPU priority, latency & RAM" },
+    @{ Id = "Net";       Name = "$($UI.Globe)  Network & DNS";   Desc = "DNS benchmarks, Wi-Fi keys, TCP stack & ports" },
+    @{ Id = "Privacy";   Name = "$($UI.Lock)  Privacy & Bloat"; Desc = "Telemetry removal, Bing, Copilot & Debloat" },
+    @{ Id = "Context";   Name = "$($UI.Folder)  Shell & Explorer";Desc = "Context menus, file extensions & UI tweaks" },
+    @{ Id = "Hardware";  Name = "$($UI.Laptop)  Hardware Audit";  Desc = "SMART drives, RAM banks, battery & GPU stats" },
+    @{ Id = "Apps";      Name = "$($UI.Package)  Software Hub";    Desc = "Winget package updater & curated installer" },
+    @{ Id = "Admin";     Name = "$($UI.Wrench)  Admin Utilities"; Desc = "GodMode, Windows tools hub & System Restore" }
 )
 $ViewContainer = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Fill"
@@ -534,7 +566,7 @@ foreach ($tab in $TabList) {
     $NavBtn.Add_Click({
         $TargetId = $this.Tag
         $script:CurrentTabId = $TargetId
-        $SearchBox.Text = "🔍 Search tools, tweaks & features..."
+        $SearchBox.Text = "$($SearchPlaceholder) Search tools, tweaks & features..."
         $SearchBox.ForeColor = $script:Theme.TextSubtle
         foreach ($k in $script:CategoryPanels.Keys) { $script:CategoryPanels[$k].Visible = ($k -eq $TargetId) }
         foreach ($card in $script:AllCards) { $card.Panel.Visible = $true }
@@ -552,7 +584,7 @@ foreach ($tab in $TabList) {
 # --- [Dynamic Cross-Category Search Engine] ---
 $SearchBox.Add_TextChanged({
     $Query = $SearchBox.Text.Trim().ToLower()
-    $isSearching = ($Query -ne "🔍 search tools, tweaks & features..." -and -not [string]::IsNullOrWhiteSpace($Query))
+    $isSearching = ($Query -ne $SearchPlaceholder.ToLower() -and -not [string]::IsNullOrWhiteSpace($Query))
 
     if (-not $isSearching) {
         foreach ($card in $script:AllCards) { $card.Panel.Visible = $true }
@@ -583,7 +615,7 @@ $SearchBox.Add_TextChanged({
 # ==============================================================================
 $P_Presets = $script:CategoryPanels["Presets"]
 
-New-TweakCard $P_Presets "$IconGamer Gamer Mode Profile" "Preset Profile" "Applies Ultimate Power Plan, disables GameDVR, prioritizes foreground threads & frees RAM." {
+New-TweakCard $P_Presets "$($UI.Sparkle) Gamer Mode Profile" "Preset Profile" "Applies Ultimate Power Plan, disables GameDVR, prioritizes foreground threads & frees RAM." {
     Write-Log "Applying GAMER MODE PRESET..." "Warning"
     powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 | Out-Null
     Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value 0
@@ -594,7 +626,7 @@ New-TweakCard $P_Presets "$IconGamer Gamer Mode Profile" "Preset Profile" "Appli
     Write-Log "Gamer Mode Profile successfully configured and active." "Success"
 }
 
-New-TweakCard $P_Presets "$IconShield Privacy Lockdown" "Preset Profile" "Disables telemetry, DiagTrack, Recall AI, Bing Start Search, Ad ID & Edge Background." {
+New-TweakCard $P_Presets "$($UI.Shield) Privacy Lockdown" "Preset Profile" "Disables telemetry, DiagTrack, Recall AI, Bing Start Search, Ad ID & Edge Background." {
     Write-Log "Applying PRIVACY LOCKDOWN PRESET..." "Warning"
     Stop-Service "DiagTrack", "dmwappushservice" -ErrorAction SilentlyContinue
     Set-Service "DiagTrack", "dmwappushservice" -StartupType Disabled -ErrorAction SilentlyContinue
@@ -611,7 +643,7 @@ New-TweakCard $P_Presets "$IconShield Privacy Lockdown" "Preset Profile" "Disabl
     Write-Log "Privacy Lockdown successfully enforced." "Success"
 }
 
-New-TweakCard $P_Presets "$IconBuilding Clean Workstation" "Preset Profile" "Removes consumer bloat, restores classic context menu, disables SMB signing for max speed & oplocks." {
+New-TweakCard $P_Presets "$($UI.Building) Clean Workstation" "Preset Profile" "Removes consumer bloat, restores classic context menu, disables SMB signing for max speed & oplocks." {
     Write-Log "Applying CLEAN WORKSTATION PRESET..." "Warning"
     $EnvWin11 = ([Environment]::OSVersion.Version.Build -ge 22000)
     if ($EnvWin11) {
@@ -627,7 +659,7 @@ New-TweakCard $P_Presets "$IconBuilding Clean Workstation" "Preset Profile" "Rem
     Write-Log "Clean Workstation configured." "Success"
 }
 
-New-TweakCard $P_Presets "$IconSync Express Maintenance" "Preset Profile" "Runs SSD ReTrim, clears Temp caches, flushes standby RAM & forces Windows time resync." {
+New-TweakCard $P_Presets "$($UI.Refresh) Express Maintenance" "Preset Profile" "Runs SSD ReTrim, clears Temp caches, flushes standby RAM & forces Windows time resync." {
     Write-Log "Running EXPRESS MAINTENANCE ROUTINE..." "Warning"
     foreach ($d in @("C", "D")) { if (Test-Path "$d`:\") { Optimize-Volume -DriveLetter $d -ReTrim -Defrag -Verbose 4>&1 | Out-Null } }
     cleanmgr /sagerun:1 | Out-Null
@@ -636,7 +668,7 @@ New-TweakCard $P_Presets "$IconSync Express Maintenance" "Preset Profile" "Runs 
     Write-Log "Express Maintenance completed." "Success"
 }
 
-New-TweakCard $P_Presets "$IconRollback Rollback Last Backup" "Safety" "Restores the most recent registry backup saved in the AdminWorks backup directory." {
+New-TweakCard $P_Presets "$($UI.Undo) Rollback Last Backup" "Safety" "Restores the most recent registry backup saved in the AdminWorks backup directory." {
     Write-Log "Checking for available registry backups..." "Exec"
     $latest = Get-ChildItem "$BackupDir\*.reg" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if ($latest) {
