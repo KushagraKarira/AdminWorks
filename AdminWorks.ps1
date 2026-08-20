@@ -1,6 +1,6 @@
 <#
 ================================================================================
-  ADMINWORKS PRO v4.7 - Enterprise Windows Administration & Optimization Suite
+  ADMINWORKS PRO v4.8 - Enterprise Windows Administration & Optimization Suite
   Compatible with Windows 10 & Windows 11
 ================================================================================
 #>
@@ -85,11 +85,12 @@ $UI = @{
     ArrowDown  = [char]0xE70D
     ArrowUp    = [char]0xE70E
     Search     = [char]0xE721
+    Bolt       = [char]0x26A1
     
     # Sidebar Navigation Icons
     Presets    = [char]0xE735  # Star / Presets
     Maint      = [char]0xE90F  # Wrench / Maintenance
-    Perf       = [char]0xEC11  # Bolt / Performance
+    Perf       = [char]0x26A1  # Bolt / Performance
     Net        = [char]0xE774  # Globe / Network
     Privacy    = [char]0xE72E  # Lock / Privacy
     Context    = [char]0xE8B7  # Folder / Explorer
@@ -153,22 +154,22 @@ $Header = New-Object System.Windows.Forms.Panel -Property @{
 }
 $Form.Controls.Add($Header)
 
-# 1. Left: Brand Container (Logo, Title, Subtitle)
+# 1. Left: Brand Container
 $BrandPanel = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Left"
     Width     = 235
     BackColor = $script:Theme.Header
 }
 $LogoIcon = New-Object System.Windows.Forms.Label -Property @{
-    Text        = $UI.Perf; Location = New-Object System.Drawing.Point(16, 12); Size = New-Object System.Drawing.Size(26, 26)
-    ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($IconFont, 13); UseMnemonic = $false
+    Text        = $UI.Bolt; Location = New-Object System.Drawing.Point(16, 12); Size = New-Object System.Drawing.Size(26, 26)
+    ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 13, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false
 }
 $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
     Text        = "ADMINWORKS"; Location = New-Object System.Drawing.Point(44, 12); AutoSize = $true
     ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 12, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false
 }
 $TitleSub = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "ENTERPRISE SUITE v4.7  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(46, 36); AutoSize = $true
+    Text        = "ENTERPRISE SUITE v4.8  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(46, 36); AutoSize = $true
     ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
     Cursor      = [System.Windows.Forms.Cursors]::Hand; UseMnemonic = $false
 }
@@ -177,8 +178,20 @@ $TitleSub.Add_MouseEnter({ $this.ForeColor = $script:Theme.TextMain })
 $TitleSub.Add_MouseLeave({ $this.ForeColor = $script:Theme.AccentGlow })
 $BrandPanel.Controls.AddRange(@($LogoIcon, $TitleLbl, $TitleSub))
 
-# 2. Far Right: Window Control Box (Min, Max, Close)
-$CtrlBox = New-Object System.Windows.Forms.Panel -Property @{Dock = "Right"; Width = 135; BackColor = $script:Theme.Header}
+# 2. Right: Combined Container for Search & Window Buttons
+$RightHeader = New-Object System.Windows.Forms.Panel -Property @{
+    Dock      = "Right"
+    Width     = 430
+    BackColor = $script:Theme.Header
+}
+
+# Window Control Box (Docked to far right inside $RightHeader)
+$CtrlBox = New-Object System.Windows.Forms.Panel -Property @{
+    Dock      = "Right"
+    Width     = 135
+    BackColor = $script:Theme.Header
+}
+$RightHeader.Controls.Add($CtrlBox)
 
 function New-WindowBtn($Glyph, $X, $HoverColor, $Action) {
     $B = New-Object System.Windows.Forms.Button -Property @{
@@ -207,17 +220,20 @@ $BtnMax   = New-WindowBtn $UI.Maximize 46 $script:Theme.CardHover {
 }
 $BtnMin   = New-WindowBtn $UI.Minimize 4 $script:Theme.CardHover { $Form.WindowState = "Minimized" }
 
-# 3. Right: Search Box Container (Docks to the left of CtrlBox)
+# Search Container (Docked to the left of window buttons)
 $SearchWrapper = New-Object System.Windows.Forms.Panel -Property @{
-    Dock      = "Right"
-    Width     = 290
-    Padding   = New-Object System.Windows.Forms.Padding(6, 16, 10, 16)
+    Dock      = "Fill"
+    Padding   = New-Object System.Windows.Forms.Padding(6, 16, 12, 16)
     BackColor = $script:Theme.Header
 }
+$RightHeader.Controls.Add($SearchWrapper)
+
 $SearchPill = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Fill"
     BackColor = $script:Theme.Sidebar
 }
+$SearchWrapper.Controls.Add($SearchPill)
+
 $SearchIconLbl = New-Object System.Windows.Forms.Label -Property @{
     Text        = $UI.Search; Location = New-Object System.Drawing.Point(8, 7); Size = New-Object System.Drawing.Size(20, 20)
     ForeColor   = $script:Theme.TextSubtle; Font = New-Object System.Drawing.Font($IconFont, 9); UseMnemonic = $false
@@ -234,9 +250,8 @@ $SearchBox.Add_LostFocus({
     if ([string]::IsNullOrWhiteSpace($this.Text)) { $this.Text = $SearchPlaceholder; $this.ForeColor = $script:Theme.TextSubtle } 
 })
 $SearchPill.Controls.AddRange(@($SearchIconLbl, $SearchBox))
-$SearchWrapper.Controls.Add($SearchPill)
 
-# 4. Center: System Info Badge (Fills remaining center space)
+# 3. Center: System Info Badge
 $CenterPanel = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Fill"
     BackColor = $script:Theme.Header
@@ -257,14 +272,13 @@ $SysBadge = New-Object System.Windows.Forms.Label -Property @{
 }
 $CenterPanel.Controls.Add($SysBadge)
 
-# Add all Header controls and set deterministic Z-Order
-$Header.Controls.AddRange(@($CenterPanel, $BrandPanel, $SearchWrapper, $CtrlBox))
-$BrandPanel.BringToFront()      # Far Left
-$SearchWrapper.BringToFront()   # Next to CtrlBox
-$CtrlBox.BringToFront()         # Far Right (Outer-most edge)
-$CenterPanel.SendToBack()       # Fills center between Left and Right
+# Add elements to Header
+$Header.Controls.AddRange(@($CenterPanel, $BrandPanel, $RightHeader))
+$BrandPanel.BringToFront()
+$RightHeader.BringToFront()
+$CenterPanel.SendToBack()
 
-# Window Dragging Support
+# Dragging Support
 $dragHandler = {
     if ($_.Button -eq [System.Windows.Forms.MouseButtons]::Left) {
         [NativeMethods]::ReleaseCapture() | Out-Null
@@ -682,9 +696,9 @@ foreach ($tab in $TabList) {
     $ViewContainer.Controls.Add($Flow)
     $script:CategoryPanels[$tab.Id] = $Flow
 
-    # Category Section Banner Header
+    # Category Section Banner Header (Separate Icon and Text Labels to prevent glyph box [])
     $Banner = New-Object System.Windows.Forms.FlowLayoutPanel -Property @{
-        Height        = 32
+        Height        = 34
         Width         = 1200
         FlowDirection = "LeftToRight"
         WrapContents  = $false
@@ -692,8 +706,16 @@ foreach ($tab in $TabList) {
         Margin        = New-Object System.Windows.Forms.Padding(4, 2, 4, 8)
         Tag           = "Banner"
     }
+    $BannerIcon = New-Object System.Windows.Forms.Label -Property @{
+        Text        = $tab.Icon
+        AutoSize    = $true
+        ForeColor   = $script:Theme.AccentGlow
+        Font        = New-Object System.Drawing.Font($IconFont, 11)
+        Margin      = New-Object System.Windows.Forms.Padding(0, 0, 6, 0)
+        UseMnemonic = $false
+    }
     $BannerTitle = New-Object System.Windows.Forms.Label -Property @{
-        Text        = "$($tab.Icon)  $($tab.Name.ToUpper())"
+        Text        = $tab.Name.ToUpper()
         AutoSize    = $true
         ForeColor   = $script:Theme.TextMain
         Font        = New-Object System.Drawing.Font($GlobalFont, 10.5, [System.Drawing.FontStyle]::Bold)
@@ -708,7 +730,7 @@ foreach ($tab in $TabList) {
         Margin      = New-Object System.Windows.Forms.Padding(0, 2, 0, 0)
         UseMnemonic = $false
     }
-    $Banner.Controls.AddRange(@($BannerTitle, $BannerDesc))
+    $Banner.Controls.AddRange(@($BannerIcon, $BannerTitle, $BannerDesc))
     $Flow.Controls.Add($Banner)
 
     # Sidebar Item Panel
@@ -1345,5 +1367,5 @@ $Form.Add_FormClosing({
     if ($script:CpuCounter) { $script:CpuCounter.Dispose() }
 })
 
-Write-Log "AdminWorks Pro Suite v4.7 loaded and ready." "Success"
+Write-Log "AdminWorks Pro Suite v4.8 loaded and ready." "Success"
 [void]$Form.ShowDialog()
