@@ -5,12 +5,6 @@
 ================================================================================
 #>
 
-# --- [Self-Elevate to Administrator] ---
-if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-ExecutionPolicy Bypass", "-File `"$PSCommandPath`"" -Verb RunAs
-    exit
-}
-
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # --- [OS Version Detection Helper] ---
