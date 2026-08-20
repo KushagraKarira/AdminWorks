@@ -94,6 +94,14 @@ try {
 } catch {}
 
 # --- [Header: Brand, System Badge, Search, Window Controls] ---
+
+$Header = New-Object System.Windows.Forms.Panel -Property @{
+    Dock      = "Top"
+    Height    = 70
+    BackColor = $script:Theme.Header
+}
+$Form.Controls.Add($Header)
+
 # Brand Label
 $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
     Text      = "⚡ ADMINWORKS"
