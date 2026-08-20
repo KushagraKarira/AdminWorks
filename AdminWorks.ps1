@@ -1,6 +1,6 @@
 <#
 ================================================================================
-  ADMINWORKS PRO v4.4 - Enterprise Windows Administration & Optimization Suite
+  ADMINWORKS PRO v4.5 - Enterprise Windows Administration & Optimization Suite
   Compatible with Windows 10 & Windows 11 (Responsive Multi-Resolution Edition)
 ================================================================================
 #>
@@ -170,7 +170,7 @@ $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
     ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 12, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false
 }
 $TitleSub = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "ENTERPRISE SUITE v4.4  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(46, 36); AutoSize = $true
+    Text        = "ENTERPRISE SUITE v4.5  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(46, 36); AutoSize = $true
     ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
     Cursor      = [System.Windows.Forms.Cursors]::Hand; UseMnemonic = $false
 }
@@ -242,7 +242,7 @@ $SearchBox.Add_LostFocus({
 })
 $SearchPill.Controls.AddRange(@($SearchIconLbl, $SearchBox))
 
-# Center: System Info Badge (Fills middle without overlapping)
+# Center: System Info Badge
 $CenterPanel = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Fill"
     BackColor = $script:Theme.Header
@@ -265,7 +265,7 @@ $SysBadge = New-Object System.Windows.Forms.Label -Property @{
 }
 $CenterPanel.Controls.Add($SysBadge)
 
-# Dragging Support across Header Regions
+# Dragging Support
 $dragHandler = {
     if ($_.Button -eq [System.Windows.Forms.MouseButtons]::Left) {
         [NativeMethods]::ReleaseCapture() | Out-Null
@@ -391,7 +391,7 @@ $MainArea = New-Object System.Windows.Forms.Panel -Property @{
 $Form.Controls.Add($MainArea)
 $MainArea.BringToFront()
 
-# Responsive TableLayoutPanel for Live Stats
+# Live Stats Bar
 $TelemetryBar = New-Object System.Windows.Forms.TableLayoutPanel -Property @{
     Dock        = "Top"
     Height      = 64
@@ -458,12 +458,11 @@ $ViewContainer = New-Object System.Windows.Forms.Panel -Property @{
 $MainArea.Controls.Add($ViewContainer)
 $ViewContainer.BringToFront()
 
-# --- [Dynamic Responsive Card Sizing Function] ---
+# --- [Dynamic Responsive Layout Function] ---
 function Update-ResponsiveLayout {
     if (-not $ViewContainer -or $ViewContainer.ClientSize.Width -le 100) { return }
     $availWidth = $ViewContainer.ClientSize.Width - 36
 
-    # Select dynamic column count based on available screen width
     if ($availWidth -ge 1360) {
         $cols = 4
     } elseif ($availWidth -ge 960) {
@@ -684,23 +683,30 @@ foreach ($tab in $TabList) {
     $ViewContainer.Controls.Add($Flow)
     $script:CategoryPanels[$tab.Id] = $Flow
 
-    # Category Section Banner Header
-    $Banner = New-Object System.Windows.Forms.Panel -Property @{
-        Width        = 900
-        Height       = 38
-        Margin       = New-Object System.Windows.Forms.Padding(4, 4, 4, 8)
-        BackColor    = [System.Drawing.Color]::Transparent
+    # Category Section Banner Header (Using FlowLayoutPanel for automatic horizontal alignment)
+    $Banner = New-Object System.Windows.Forms.FlowLayoutPanel -Property @{
+        Height        = 32
+        Width         = 1200
+        FlowDirection = "LeftToRight"
+        WrapContents  = $false
+        BackColor     = [System.Drawing.Color]::Transparent
+        Margin        = New-Object System.Windows.Forms.Padding(4, 2, 4, 8)
+        Tag           = "Banner"
     }
     $BannerTitle = New-Object System.Windows.Forms.Label -Property @{
         Text        = "$($tab.Icon)  $($tab.Name.ToUpper())"
-        Location    = New-Object System.Drawing.Point(4, 0); AutoSize = $true
-        ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 10.5, [System.Drawing.FontStyle]::Bold)
+        AutoSize    = $true
+        ForeColor   = $script:Theme.TextMain
+        Font        = New-Object System.Drawing.Font($GlobalFont, 10.5, [System.Drawing.FontStyle]::Bold)
+        Margin      = New-Object System.Windows.Forms.Padding(0, 0, 8, 0)
         UseMnemonic = $false
     }
     $BannerDesc = New-Object System.Windows.Forms.Label -Property @{
         Text        = "— $($tab.Desc)"
-        Location    = New-Object System.Drawing.Point($BannerTitle.PreferredWidth + 12, 3); AutoSize = $true
-        ForeColor   = $script:Theme.TextSubtle; Font = New-Object System.Drawing.Font($GlobalFont, 8)
+        AutoSize    = $true
+        ForeColor   = $script:Theme.TextSubtle
+        Font        = New-Object System.Drawing.Font($GlobalFont, 8.5)
+        Margin      = New-Object System.Windows.Forms.Padding(0, 2, 0, 0)
         UseMnemonic = $false
     }
     $Banner.Controls.AddRange(@($BannerTitle, $BannerDesc))
@@ -1340,5 +1346,5 @@ $Form.Add_FormClosing({
     if ($script:CpuCounter) { $script:CpuCounter.Dispose() }
 })
 
-Write-Log "AdminWorks Pro Suite v4.4 loaded and ready." "Success"
+Write-Log "AdminWorks Pro Suite v4.5 loaded and ready." "Success"
 [void]$Form.ShowDialog()
