@@ -108,13 +108,13 @@ $Form.Controls.Add($Header)
 
 # Brand Label
 $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
-    Text      = "⚡ ADMINWORKS"
+    Text      = "[char]0x26A1 ADMINWORKS"
     Location  = New-Object System.Drawing.Point(22, 14); AutoSize = $true
     ForeColor = $script:Theme.TextMain
     Font      = New-Object System.Drawing.Font($GlobalFont, 12.5, [System.Drawing.FontStyle]::Bold)
 }
 $TitleSub = New-Object System.Windows.Forms.Label -Property @{
-    Text      = "ENTERPRISE SUITE v4.2  •  BY KUSHAGRA KARIRA"
+    Text      = "ENTERPRISE SUITE v4.2  [char]0x2022  BY KUSHAGRA KARIRA"
     Location  = New-Object System.Drawing.Point(24, 40); AutoSize = $true
     ForeColor = $script:Theme.AccentGlow
     Font      = New-Object System.Drawing.Font($GlobalFont, 7.5, [System.Drawing.FontStyle]::Bold)
@@ -142,7 +142,7 @@ try {
 
 $OSInfo = (Get-CimInstance Win32_OperatingSystem)
 $SysBadge = New-Object System.Windows.Forms.Label -Property @{
-    Text      = "$($env:COMPUTERNAME)  •  IP: $LocalIP  •  $($OSInfo.Caption)"
+    Text      = "$($env:COMPUTERNAME)  [char]0x2022  IP: $LocalIP  [char]0x2022  $($OSInfo.Caption)"
     Location  = New-Object System.Drawing.Point(260, 26); Size = New-Object System.Drawing.Size(380, 20)
     ForeColor = $script:Theme.TextMuted; Font = New-Object System.Drawing.Font($GlobalFont, 8.5)
 }
@@ -156,9 +156,9 @@ $SearchPanel = New-Object System.Windows.Forms.Panel -Property @{
 $SearchBox = New-Object System.Windows.Forms.TextBox -Property @{
     BorderStyle = "None"; BackColor = $script:Theme.Sidebar; ForeColor = $script:Theme.TextMain
     Font = New-Object System.Drawing.Font($GlobalFont, 9.5); Location = New-Object System.Drawing.Point(12, 8)
-    Width = 295; Text = "🔍 Search tools, tweaks & features..."
+    Width = 295; Text = "[char]::ConvertFromUtf32(0x1F50D) Search tools, tweaks & features..."
 }
-$SearchBox.Add_GotFocus({ if ($this.Text -eq "🔍 Search tools, tweaks & features...") { $this.Text = ""; $this.ForeColor = $script:Theme.TextMain } })
+$SearchBox.Add_GotFocus({ if ($this.Text -eq "[char]::ConvertFromUtf32(0x1F50D) Search tools, tweaks & features...") { $this.Text = ""; $this.ForeColor = $script:Theme.TextMain } })
 $SearchBox.Add_LostFocus({ if ([string]::IsNullOrWhiteSpace($this.Text)) { $this.Text = "🔍 Search tools, tweaks & features..."; $this.ForeColor = $script:Theme.TextSubtle } })
 $SearchPanel.Controls.Add($SearchBox)
 $Header.Controls.Add($SearchPanel)
@@ -181,14 +181,14 @@ function New-WindowBtn($Text, $X, $HoverColor, $Action) {
     $CtrlBox.Controls.Add($B)
     return $B
 }
-$BtnClose = New-WindowBtn "✕" 90 $script:Theme.Danger { $Form.Close() }
-$BtnMax   = New-WindowBtn "⬜" 46 $script:Theme.CardHover { 
+$BtnClose = New-WindowBtn "[char]0x2715" 90 $script:Theme.Danger { $Form.Close() }
+$BtnMax   = New-WindowBtn "[char]0x25A1" 46 $script:Theme.CardHover { 
     if ($Form.WindowState -eq "Maximized") { 
         $Form.WindowState = "Normal"
-        $this.Text = "⬜"
+        $this.Text = "[char]0x25A1"
     } else { 
         $Form.WindowState = "Maximized"
-        $this.Text = "❐"
+        $this.Text = "[char]0x274F"
     } 
 }
 $BtnMin   = New-WindowBtn "—" 2 $script:Theme.CardHover { $Form.WindowState = "Minimized" }
@@ -489,17 +489,16 @@ function New-TweakCard ($CategoryPanel, $Title, $CategoryTag, $Desc, $Action) {
 
 # --- [Sidebar Tabs Definition with Tested Universal Glyphs] ---
 $TabList = @(
-    @{ Id = "Presets";   Name = "★  Preset Profiles"; Desc = "1-Click Optimization Profiles" },
-    @{ Id = "Maint";     Name = "⚙  Maintenance";     Desc = "DISM, SFC, Component cleanup, Update fixes" },
-    @{ Id = "Perf";      Name = "⚡  Performance";     Desc = "Power plans, CPU priority, latency & RAM" },
-    @{ Id = "Net";       Name = "🌐  Network & DNS";   Desc = "DNS benchmarks, Wi-Fi keys, TCP stack & ports" },
-    @{ Id = "Privacy";   Name = "🔒  Privacy & Bloat"; Desc = "Telemetry removal, Bing, Copilot & Debloat" },
-    @{ Id = "Context";   Name = "📁  Shell & Explorer";Desc = "Context menus, file extensions & UI tweaks" },
-    @{ Id = "Hardware";  Name = "💻  Hardware Audit";  Desc = "SMART drives, RAM banks, battery & GPU stats" },
-    @{ Id = "Apps";      Name = "📦  Software Hub";    Desc = "Winget package updater & curated installer" },
-    @{ Id = "Admin";     Name = "🛠  Admin Utilities"; Desc = "GodMode, Windows tools hub & System Restore" }
+    @{ Id = "Presets";   Name = "$IconPresets  Preset Profiles"; Desc = "1-Click Optimization Profiles" },
+    @{ Id = "Maint";     Name = "$IconMaint  Maintenance";     Desc = "DISM, SFC, Component cleanup, Update fixes" },
+    @{ Id = "Perf";      Name = "$IconPerf  Performance";     Desc = "Power plans, CPU priority, latency & RAM" },
+    @{ Id = "Net";       Name = "$IconNet  Network & DNS";   Desc = "DNS benchmarks, Wi-Fi keys, TCP stack & ports" },
+    @{ Id = "Privacy";   Name = "$IconPrivacy  Privacy & Bloat"; Desc = "Telemetry removal, Bing, Copilot & Debloat" },
+    @{ Id = "Context";   Name = "$IconExplorer  Shell & Explorer";Desc = "Context menus, file extensions & UI tweaks" },
+    @{ Id = "Hardware";  Name = "$IconHardware  Hardware Audit";  Desc = "SMART drives, RAM banks, battery & GPU stats" },
+    @{ Id = "Apps";      Name = "$IconApps  Software Hub";    Desc = "Winget package updater & curated installer" },
+    @{ Id = "Admin";     Name = "$IconAdmin  Admin Utilities"; Desc = "GodMode, Windows tools hub & System Restore" }
 )
-
 $ViewContainer = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Fill"
     BackColor = $script:Theme.Bg
@@ -579,12 +578,12 @@ $SearchBox.Add_TextChanged({
 # FEATURE REGISTRATION & PRESETS
 # ==============================================================================
 
-# ------------------------------------------------------------------------------
+# ==============================================================================
 # 1. 1-CLICK PRESET PROFILES
-# ------------------------------------------------------------------------------
+# ==============================================================================
 $P_Presets = $script:CategoryPanels["Presets"]
 
-New-TweakCard $P_Presets "✦ Gamer Mode Profile" "Preset Profile" "Applies Ultimate Power Plan, disables GameDVR, prioritizes foreground threads & frees RAM." {
+New-TweakCard $P_Presets "$IconGamer Gamer Mode Profile" "Preset Profile" "Applies Ultimate Power Plan, disables GameDVR, prioritizes foreground threads & frees RAM." {
     Write-Log "Applying GAMER MODE PRESET..." "Warning"
     powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 | Out-Null
     Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value 0
@@ -595,7 +594,7 @@ New-TweakCard $P_Presets "✦ Gamer Mode Profile" "Preset Profile" "Applies Ulti
     Write-Log "Gamer Mode Profile successfully configured and active." "Success"
 }
 
-New-TweakCard $P_Presets "🛡 Privacy Lockdown" "Preset Profile" "Disables telemetry, DiagTrack, Recall AI, Bing Start Search, Ad ID & Edge Background." {
+New-TweakCard $P_Presets "$IconShield Privacy Lockdown" "Preset Profile" "Disables telemetry, DiagTrack, Recall AI, Bing Start Search, Ad ID & Edge Background." {
     Write-Log "Applying PRIVACY LOCKDOWN PRESET..." "Warning"
     Stop-Service "DiagTrack", "dmwappushservice" -ErrorAction SilentlyContinue
     Set-Service "DiagTrack", "dmwappushservice" -StartupType Disabled -ErrorAction SilentlyContinue
@@ -612,7 +611,7 @@ New-TweakCard $P_Presets "🛡 Privacy Lockdown" "Preset Profile" "Disables tele
     Write-Log "Privacy Lockdown successfully enforced." "Success"
 }
 
-New-TweakCard $P_Presets "🏢 Clean Workstation" "Preset Profile" "Removes consumer bloat, restores classic context menu, disables SMB signing for max speed & oplocks." {
+New-TweakCard $P_Presets "$IconBuilding Clean Workstation" "Preset Profile" "Removes consumer bloat, restores classic context menu, disables SMB signing for max speed & oplocks." {
     Write-Log "Applying CLEAN WORKSTATION PRESET..." "Warning"
     $EnvWin11 = ([Environment]::OSVersion.Version.Build -ge 22000)
     if ($EnvWin11) {
@@ -628,7 +627,7 @@ New-TweakCard $P_Presets "🏢 Clean Workstation" "Preset Profile" "Removes cons
     Write-Log "Clean Workstation configured." "Success"
 }
 
-New-TweakCard $P_Presets "🔄 Express Maintenance" "Preset Profile" "Runs SSD ReTrim, clears Temp caches, flushes standby RAM & forces Windows time resync." {
+New-TweakCard $P_Presets "$IconSync Express Maintenance" "Preset Profile" "Runs SSD ReTrim, clears Temp caches, flushes standby RAM & forces Windows time resync." {
     Write-Log "Running EXPRESS MAINTENANCE ROUTINE..." "Warning"
     foreach ($d in @("C", "D")) { if (Test-Path "$d`:\") { Optimize-Volume -DriveLetter $d -ReTrim -Defrag -Verbose 4>&1 | Out-Null } }
     cleanmgr /sagerun:1 | Out-Null
@@ -637,7 +636,7 @@ New-TweakCard $P_Presets "🔄 Express Maintenance" "Preset Profile" "Runs SSD R
     Write-Log "Express Maintenance completed." "Success"
 }
 
-New-TweakCard $P_Presets "↺ Rollback Last Backup" "Safety" "Restores the most recent registry backup saved in the AdminWorks backup directory." {
+New-TweakCard $P_Presets "$IconRollback Rollback Last Backup" "Safety" "Restores the most recent registry backup saved in the AdminWorks backup directory." {
     Write-Log "Checking for available registry backups..." "Exec"
     $latest = Get-ChildItem "$BackupDir\*.reg" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if ($latest) {
