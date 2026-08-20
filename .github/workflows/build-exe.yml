@@ -1,16 +1,18 @@
 name: Compile PowerShell to EXE & Auto-Release
 
+# Trigger the workflow on pushes to main, or manually via the Actions tab
 on:
   push:
     branches: [ "main", "master" ]
   workflow_dispatch:
 
+# Grant the workflow permission to write to your repository releases
 permissions:
   contents: write
 
 jobs:
   build:
-    name: Build and Release Executable
+    name: Build and Release Executables
     runs-on: windows-latest
 
     steps:
@@ -22,25 +24,34 @@ jobs:
         run: |
           Install-Module -Name ps2exe -Force -Scope CurrentUser -AcceptLicense
 
-      # Using the direct argument syntax to bypass module parsing bugs
       - name: Compile AdminWorks.ps1
         shell: powershell
         run: |
-          ps2exe .\AdminWorks.ps1 .\AdminWorks.exe -noConsole -requireAdmin
+          Invoke-ps2exe -inputFile ".\AdminWorks.ps1" -outputFile ".\AdminWorks.exe" -noConsole -title "AdminWorks" -company "YourName" -version "1.0.0.0"
 
-      - name: Upload EXE Artifact
+      - name: Compile AdminWorksPro.ps1
+        shell: powershell
+        run: |
+          Invoke-ps2exe -inputFile ".\AdminWorksPro.ps1" -outputFile ".\AdminWorksPro.exe" -noConsole -title "AdminWorks Pro" -company "YourName" -version "4.1.0.0"
+
+      - name: Upload EXE Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: AdminWorks-Executable
-          path: .\AdminWorks.exe
+          name: AdminWorks-Executables
+          path: |
+            .\AdminWorks.exe
+            .\AdminWorksPro.exe
           retention-days: 7
 
-      - name: Auto Release EXE
+      # Automatically create a GitHub Release and attach the compiled EXEs
+      - name: Auto Release EXEs
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: AdminWorks Build ${{ github.run_number }}
-          body: "Automated build of the AdminWorks executable."
-          files: .\AdminWorks.exe
+          body: "Automated build of AdminWorks and AdminWorks Pro executables."
+          files: |
+            .\AdminWorks.exe
+            .\AdminWorksPro.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
