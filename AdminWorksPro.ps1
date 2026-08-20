@@ -94,12 +94,26 @@ try {
 } catch {}
 
 # --- [Header: Brand, System Badge, Search, Window Controls] ---
-$Header = New-Object System.Windows.Forms.Panel -Property @{
-    Dock      = "Top"
-    Height    = 70
-    BackColor = $script:Theme.Header
+# Brand Label
+$TitleLbl = New-Object System.Windows.Forms.Label -Property @{
+    Text      = "⚡ ADMINWORKS"
+    Location  = New-Object System.Drawing.Point(22, 14); AutoSize = $true
+    ForeColor = $script:Theme.TextMain
+    Font      = New-Object System.Drawing.Font($GlobalFont, 12.5, [System.Drawing.FontStyle]::Bold)
 }
-$Form.Controls.Add($Header)
+$TitleSub = New-Object System.Windows.Forms.Label -Property @{
+    Text      = "ENTERPRISE SUITE v4.1  •  BY KUSHAGRA KARIRA"
+    Location  = New-Object System.Drawing.Point(24, 40); AutoSize = $true
+    ForeColor = $script:Theme.AccentGlow
+    Font      = New-Object System.Drawing.Font($GlobalFont, 7.5, [System.Drawing.FontStyle]::Bold)
+    Cursor    = [System.Windows.Forms.Cursors]::Hand
+}
+# Make it clickable to open the GitHub repo
+$TitleSub.Add_Click({ Start-Process "https://github.com/KushagraKarira/AdminWorks" })
+$TitleSub.Add_MouseEnter({ $this.ForeColor = $script:Theme.TextMain })
+$TitleSub.Add_MouseLeave({ $this.ForeColor = $script:Theme.AccentGlow })
+
+$Header.Controls.AddRange(@($TitleLbl, $TitleSub))
 
 # Native Smooth Dragging
 $Header.Add_MouseDown({
@@ -897,11 +911,22 @@ New-TweakCard $P_Hw "GPU & Display Audit" "Graphics Specs" "Inspects installed G
 # ------------------------------------------------------------------------------
 $P_Apps = $script:CategoryPanels["Apps"]
 
-New-TweakCard $P_Apps "Winget Upgrade All Apps" "Package Manager" "Runs winget upgrade --all with auto-accepted package agreements." {
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-        Write-Log "Winget is not installed on this system. Install 'App Installer' via Microsoft Store." "Error"
-        return
+New-TweakCard $P_Apps "Install / Repair Winget" "Package Manager" "Downloads and forces the installation of the latest Microsoft App Installer (Winget) from GitHub." {
+    Write-Log "Downloading latest Winget MSIX Bundle from Microsoft..." "Warning"
+    $url = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
+    $file = "$env:TEMP\winget.msixbundle"
+    try {
+        Invoke-WebRequest -Uri $url -OutFile $file -UseBasicParsing
+        Write-Log "Installing Winget package..." "Exec"
+        Add-AppxPackage -Path $file -ForceUpdateFromAnyVersion -ErrorAction Stop
+        Write-Log "Winget (App Installer) successfully installed/repaired." "Success"
+    } catch {
+        Write-Log "Failed to install Winget: $($_.Exception.Message)" "Error"
     }
+}
+
+New-TweakCard $P_Apps "Winget Upgrade All Apps" "Package Manager" "Runs winget upgrade --all with auto-accepted package agreements." {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing. Run 'Install / Repair Winget' first." "Error"; return }
     Write-Log "Scanning for package upgrades via Winget..." "Warning"
     winget upgrade --all --include-unknown --accept-package-agreements --accept-source-agreements | ForEach-Object {
         if ($_.Trim() -ne "") { Write-Log $_ "Info" }
@@ -909,15 +934,36 @@ New-TweakCard $P_Apps "Winget Upgrade All Apps" "Package Manager" "Runs winget u
     Write-Log "Winget package sync complete." "Success"
 }
 
-New-TweakCard $P_Apps "Install 7-Zip & PowerToys" "Essential Tools" "Installs 7-Zip file archiver and Microsoft PowerToys via Winget." {
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing." "Error"; return }
-    Write-Log "Installing 7-Zip and PowerToys..." "Exec"
-    winget install 7zip.7zip --silent --accept-package-agreements --accept-source-agreements | Out-Null
-    winget install Microsoft.PowerToys --silent --accept-package-agreements --accept-source-agreements | Out-Null
-    Write-Log "7-Zip & PowerToys installed." "Success"
+New-TweakCard $P_Apps "Install WinToys" "System Tweaker" "Installs WinToys, a powerful GUI optimizer and debloater for Windows." {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing. Run 'Install / Repair Winget' first." "Error"; return }
+    Write-Log "Installing WinToys via Microsoft Store..." "Exec"
+    winget install --id 9P8LTPGCBZXD --silent --accept-package-agreements --accept-source-agreements | Out-Null
+    Write-Log "WinToys successfully installed." "Success"
 }
 
-New-TweakCard $P_Apps "Install Dev Tools (Git & VSCode)" "Dev Suite" "Installs Git for Windows and Visual Studio Code via Winget." {
+New-TweakCard $P_Apps "Install 7-Zip" "Essential Tools" "Installs the industry-standard 7-Zip file compression utility." {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing." "Error"; return }
+    Write-Log "Installing 7-Zip..." "Exec"
+    winget install 7zip.7zip --silent --accept-package-agreements --accept-source-agreements | Out-Null
+    Write-Log "7-Zip installed." "Success"
+}
+
+New-TweakCard $P_Apps "Install PowerToys" "Essential Tools" "Installs Microsoft PowerToys for advanced system utilities and window management." {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing." "Error"; return }
+    Write-Log "Installing PowerToys..." "Exec"
+    winget install Microsoft.PowerToys --silent --accept-package-agreements --accept-source-agreements | Out-Null
+    Write-Log "Microsoft PowerToys installed." "Success"
+}
+
+New-TweakCard $P_Apps "Install Nerd Fonts" "Developer Fonts" "Installs Cascadia Code & FiraCode Nerd Fonts for terminal aesthetics." {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing." "Error"; return }
+    Write-Log "Installing Cascadia & FiraCode Nerd Fonts..." "Exec"
+    winget install ryanoasis.NerdFonts.CascadiaCode --silent --accept-package-agreements | Out-Null
+    winget install ryanoasis.NerdFonts.FiraCode --silent --accept-package-agreements | Out-Null
+    Write-Log "Nerd Fonts successfully installed." "Success"
+}
+
+New-TweakCard $P_Apps "Install Dev Tools" "Dev Suite" "Installs Git for Windows and Visual Studio Code via Winget." {
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing." "Error"; return }
     Write-Log "Installing Git & VSCode..." "Exec"
     winget install Git.Git --silent --accept-package-agreements --accept-source-agreements | Out-Null
