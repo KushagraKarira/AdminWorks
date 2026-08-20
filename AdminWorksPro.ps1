@@ -1,6 +1,7 @@
 <#
 ================================================================================
-  ADMINWORKS PRO v4.0 - Enterprise Windows Administration & Optimization Suite
+  ADMINWORKS PRO v4.1 - Enterprise Windows Administration & Optimization Suite
+  Compatible with Windows 10 & Windows 11
 ================================================================================
 #>
 
@@ -12,7 +13,12 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
-# --- [High-DPI Scaling & Native Windows 11 DWM Helpers] ---
+# --- [OS Version Detection Helper] ---
+$script:OSBuild = [Environment]::OSVersion.Version.Build
+$script:IsWin11 = ($script:OSBuild -ge 22000)
+$script:IsWin10 = ($script:OSBuild -ge 10240 -and $script:OSBuild -lt 22000)
+
+# --- [High-DPI Scaling & Native Windows DWM Helpers] ---
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
@@ -76,10 +82,15 @@ try {
     if ($prop) { $prop.SetValue($Form, $true, $null) }
 } catch {}
 
-# Apply Windows 11 Dark Mode Frame Attribute
+# Apply Dark Mode Frame Attribute (Supports Windows 11 and Windows 10)
 try {
     $darkValue = 1
-    [NativeMethods]::DwmSetWindowAttribute($Form.Handle, 20, [ref]$darkValue, 4) | Out-Null
+    # Try modern DWM attribute 20 (Windows 11 / Windows 10 2004+)
+    $res = [NativeMethods]::DwmSetWindowAttribute($Form.Handle, 20, [ref]$darkValue, 4)
+    if ($res -ne 0) {
+        # Fallback to older DWM attribute 19 (Windows 10 1809/1903)
+        [NativeMethods]::DwmSetWindowAttribute($Form.Handle, 19, [ref]$darkValue, 4) | Out-Null
+    }
 } catch {}
 
 # --- [Header: Brand, System Badge, Search, Window Controls] ---
@@ -106,7 +117,7 @@ $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
     Font      = New-Object System.Drawing.Font($GlobalFont, 12.5, [System.Drawing.FontStyle]::Bold)
 }
 $TitleSub = New-Object System.Windows.Forms.Label -Property @{
-    Text      = "ENTERPRISE SUITE v4.0"
+    Text      = "ENTERPRISE SUITE v4.1"
     Location  = New-Object System.Drawing.Point(24, 40); AutoSize = $true
     ForeColor = $script:Theme.AccentGlow
     Font      = New-Object System.Drawing.Font($GlobalFont, 7.5, [System.Drawing.FontStyle]::Bold)
@@ -435,15 +446,15 @@ function New-TweakCard ($CategoryPanel, $Title, $CategoryTag, $Desc, $Action) {
 
 # --- [Sidebar Tabs Definition] ---
 $TabList = @(
-    @{ Id = "Presets";   Name = "🎯 Preset Profiles"; Desc = "1-Click Optimization & Configuration Profiles" },
-    @{ Id = "Maint";     Name = "🛠️ Maintenance";     Desc = "DISM, SFC, Component cleanup, Update fixes" },
-    @{ Id = "Perf";      Name = "⚡ Performance";     Desc = "Power plans, CPU priority, latency & RAM tweaks" },
-    @{ Id = "Net";       Name = "🌐 Network & DNS";   Desc = "DNS benchmarks, Wi-Fi keys, TCP stack & ports" },
-    @{ Id = "Privacy";   Name = "🛡️ Privacy & Bloat"; Desc = "Telemetry removal, Bing & OEM debloat, AI Recall" },
-    @{ Id = "Context";   Name = "🖱️ Shell & Explorer";Desc = "Context menus, file extensions & UI tweaks" },
-    @{ Id = "Hardware";  Name = "🔋 Hardware Audit";  Desc = "SMART drives, RAM banks, battery & GPU stats" },
-    @{ Id = "Apps";      Name = "📦 Software Hub";    Desc = "Winget package updater & curated installer" },
-    @{ Id = "Admin";     Name = "🧰 Admin Utilities"; Desc = "GodMode, Windows tools hub & System Restore" }
+    @{ Id = "Presets";   Name = "★  Preset Profiles"; Desc = "1-Click Optimization & Configuration Profiles" },
+    @{ Id = "Maint";     Name = "⚙  Maintenance";     Desc = "DISM, SFC, Component cleanup, Update fixes" },
+    @{ Id = "Perf";      Name = "⚡  Performance";     Desc = "Power plans, CPU priority, latency & RAM tweaks" },
+    @{ Id = "Net";       Name = "☁  Network & DNS";   Desc = "DNS benchmarks, Wi-Fi keys, TCP stack & ports" },
+    @{ Id = "Privacy";   Name = "🔒  Privacy & Bloat"; Desc = "Telemetry removal, Bing & OEM debloat, AI Recall" },
+    @{ Id = "Context";   Name = "▤  Shell & Explorer";Desc = "Context menus, file extensions & UI tweaks" },
+    @{ Id = "Hardware";  Name = "⛁  Hardware Audit";  Desc = "SMART drives, RAM banks, battery & GPU stats" },
+    @{ Id = "Apps";      Name = "❖  Software Hub";    Desc = "Winget package updater & curated installer" },
+    @{ Id = "Admin";     Name = "⚒  Admin Utilities"; Desc = "GodMode, Windows tools hub & System Restore" }
 )
 
 $ViewContainer = New-Object System.Windows.Forms.Panel -Property @{
@@ -535,13 +546,22 @@ New-TweakCard $P_Presets "🛡️ Privacy Lockdown" "Preset Profile" "Disables t
     reg add "HKCU\Software\Policies\Microsoft\Windows\Explorer" /v "DisableSearchBoxSuggestions" /t REG_DWORD /d 1 /f | Out-Null
     reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Search" /v "BingSearchEnabled" /t REG_DWORD /d 0 /f | Out-Null
     reg add "HKLM\SOFTWARE\Policies\Microsoft\Edge" /v "BackgroundModeEnabled" /t REG_DWORD /d 0 /f | Out-Null
-    Disable-WindowsOptionalFeature -Online -FeatureName "Recall" -Remove -NoRestart -ErrorAction SilentlyContinue | Out-Null
+    
+    # Conditional Windows 11 Recall AI Removal
+    $EnvWin11 = ([Environment]::OSVersion.Version.Build -ge 22000)
+    if ($EnvWin11 -and (Get-WindowsOptionalFeature -Online -FeatureName "Recall" -ErrorAction SilentlyContinue)) {
+        Disable-WindowsOptionalFeature -Online -FeatureName "Recall" -Remove -NoRestart -ErrorAction SilentlyContinue | Out-Null
+    }
+    
     Write-Log "Privacy Lockdown successfully enforced." "Success"
 }
 
 New-TweakCard $P_Presets "🏢 Clean Workstation" "Preset Profile" "Removes consumer bloat, restores classic context menu, enables file extensions & optimizes SMB." {
     Write-Log "Applying CLEAN WORKSTATION PRESET..." "Warning"
-    reg add "HKCU\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" /f /ve | Out-Null
+    $EnvWin11 = ([Environment]::OSVersion.Version.Build -ge 22000)
+    if ($EnvWin11) {
+        reg add "HKCU\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" /f /ve | Out-Null
+    }
     Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -Value 0
     Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Hidden" -Value 1
     Set-SmbClientConfiguration -EnableSecuritySignature $false -Force
@@ -724,7 +744,7 @@ New-TweakCard $P_Net "Scan LAN Subnet Devices" "Network Discovery" "Sweeps the l
     foreach ($line in $arp) {
         $parts = $line.Line.Trim() -split "\s+"
         if ($parts.Count -ge 2) {
-            Write-Log "Active LAN Host: IP $($parts[0]) | MAC $($parts)" "Info"
+            Write-Log "Active LAN Host: IP $($parts[0]) | MAC $($parts[1])" "Info"
         }
     }
     Write-Log "Subnet discovery scan complete." "Success"
@@ -765,8 +785,13 @@ New-TweakCard $P_Privacy "Universal OEM Debloat" "App Purge" "Removes consumer b
 }
 
 New-TweakCard $P_Privacy "Disable Recall & AI Tracking" "Privacy" "Disables Windows Recall AI screen recording and snapshot feature." {
-    Disable-WindowsOptionalFeature -Online -FeatureName "Recall" -Remove -NoRestart -ErrorAction SilentlyContinue | Out-Null
-    Write-Log "Windows Recall AI snapshot tracking disabled." "Success"
+    $EnvWin11 = ([Environment]::OSVersion.Version.Build -ge 22000)
+    if ($EnvWin11 -and (Get-WindowsOptionalFeature -Online -FeatureName "Recall" -ErrorAction SilentlyContinue)) {
+        Disable-WindowsOptionalFeature -Online -FeatureName "Recall" -Remove -NoRestart -ErrorAction SilentlyContinue | Out-Null
+        Write-Log "Windows Recall AI snapshot tracking disabled." "Success"
+    } else {
+        Write-Log "Windows Recall is not present or applicable on this build." "Info"
+    }
 }
 
 New-TweakCard $P_Privacy "Kill Telemetry & DiagTrack" "Privacy" "Disables Connected User Experiences (DiagTrack), dmwappushservice, and telemetry." {
@@ -796,6 +821,11 @@ New-TweakCard $P_Privacy "Block Telemetry in Hosts" "Security" "Appends known te
 $P_Context = $script:CategoryPanels["Context"]
 
 New-TweakCard $P_Context "Classic Context Menu" "Windows 11 UI" "Restores the Windows 10 full right-click context menu without 'Show more options'." {
+    $EnvWin11 = ([Environment]::OSVersion.Version.Build -ge 22000)
+    if (-not $EnvWin11) {
+        Write-Log "Classic Context Menu tweak is only required on Windows 11." "Info"
+        return
+    }
     reg add "HKCU\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" /f /ve | Out-Null
     Stop-Process -Name explorer -Force
     Write-Log "Windows 10 Classic Context Menu restored." "Success"
@@ -868,6 +898,10 @@ New-TweakCard $P_Hw "GPU & Display Audit" "Graphics Specs" "Inspects installed G
 $P_Apps = $script:CategoryPanels["Apps"]
 
 New-TweakCard $P_Apps "Winget Upgrade All Apps" "Package Manager" "Runs winget upgrade --all with auto-accepted package agreements." {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        Write-Log "Winget is not installed on this system. Install 'App Installer' via Microsoft Store." "Error"
+        return
+    }
     Write-Log "Scanning for package upgrades via Winget..." "Warning"
     winget upgrade --all --include-unknown --accept-package-agreements --accept-source-agreements | ForEach-Object {
         if ($_.Trim() -ne "") { Write-Log $_ "Info" }
@@ -876,6 +910,7 @@ New-TweakCard $P_Apps "Winget Upgrade All Apps" "Package Manager" "Runs winget u
 }
 
 New-TweakCard $P_Apps "Install 7-Zip & PowerToys" "Essential Tools" "Installs 7-Zip file archiver and Microsoft PowerToys via Winget." {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing." "Error"; return }
     Write-Log "Installing 7-Zip and PowerToys..." "Exec"
     winget install 7zip.7zip --silent --accept-package-agreements --accept-source-agreements | Out-Null
     winget install Microsoft.PowerToys --silent --accept-package-agreements --accept-source-agreements | Out-Null
@@ -883,6 +918,7 @@ New-TweakCard $P_Apps "Install 7-Zip & PowerToys" "Essential Tools" "Installs 7-
 }
 
 New-TweakCard $P_Apps "Install Dev Tools (Git & VSCode)" "Dev Suite" "Installs Git for Windows and Visual Studio Code via Winget." {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing." "Error"; return }
     Write-Log "Installing Git & VSCode..." "Exec"
     winget install Git.Git --silent --accept-package-agreements --accept-source-agreements | Out-Null
     winget install Microsoft.VisualStudioCode --silent --accept-package-agreements --accept-source-agreements | Out-Null
@@ -890,6 +926,7 @@ New-TweakCard $P_Apps "Install Dev Tools (Git & VSCode)" "Dev Suite" "Installs G
 }
 
 New-TweakCard $P_Apps "Install Sysinternals Suite" "SysAdmin Tools" "Installs Microsoft Sysinternals troubleshooting suite via Winget." {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing." "Error"; return }
     Write-Log "Installing Sysinternals Suite..." "Exec"
     winget install Microsoft.SysinternalsSuite --silent --accept-package-agreements --accept-source-agreements | Out-Null
     Write-Log "Sysinternals Suite installed." "Success"
