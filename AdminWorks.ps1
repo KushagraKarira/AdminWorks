@@ -685,32 +685,32 @@ foreach ($tab in $TabList) {
 
     # Category Section Banner Header (Using FlowLayoutPanel for automatic horizontal alignment)
     $Banner = New-Object System.Windows.Forms.FlowLayoutPanel -Property @{
-        Height        = 32
-        Width         = 1200
-        FlowDirection = "LeftToRight"
-        WrapContents  = $false
-        BackColor     = [System.Drawing.Color]::Transparent
-        Margin        = New-Object System.Windows.Forms.Padding(4, 2, 4, 8)
-        Tag           = "Banner"
-    }
-    $BannerTitle = New-Object System.Windows.Forms.Label -Property @{
-        Text        = "$($tab.Icon)  $($tab.Name.ToUpper())"
-        AutoSize    = $true
-        ForeColor   = $script:Theme.TextMain
-        Font        = New-Object System.Drawing.Font($GlobalFont, 10.5, [System.Drawing.FontStyle]::Bold)
-        Margin      = New-Object System.Windows.Forms.Padding(0, 0, 8, 0)
-        UseMnemonic = $false
-    }
-    $BannerDesc = New-Object System.Windows.Forms.Label -Property @{
-        Text        = "— $($tab.Desc)"
-        AutoSize    = $true
-        ForeColor   = $script:Theme.TextSubtle
-        Font        = New-Object System.Drawing.Font($GlobalFont, 8.5)
-        Margin      = New-Object System.Windows.Forms.Padding(0, 2, 0, 0)
-        UseMnemonic = $false
-    }
-    $Banner.Controls.AddRange(@($BannerTitle, $BannerDesc))
-    $Flow.Controls.Add($Banner)
+    Height        = 32
+    Width         = 1200
+    FlowDirection = "LeftToRight"
+    WrapContents  = $false
+    BackColor     = [System.Drawing.Color]::Transparent
+    Margin        = New-Object System.Windows.Forms.Padding(4, 2, 4, 8)
+    Tag           = "Banner"
+}
+$BannerTitle = New-Object System.Windows.Forms.Label -Property @{
+    Text        = "$($tab.Icon)  $($tab.Name.ToUpper())"
+    AutoSize    = $true
+    ForeColor   = $script:Theme.TextMain
+    Font        = New-Object System.Drawing.Font($GlobalFont, 10.5, [System.Drawing.FontStyle]::Bold)
+    Margin      = New-Object System.Windows.Forms.Padding(0, 0, 8, 0)
+    UseMnemonic = $false
+}
+$BannerDesc = New-Object System.Windows.Forms.Label -Property @{
+    Text        = "— $($tab.Desc)"
+    AutoSize    = $true
+    ForeColor   = $script:Theme.TextSubtle
+    Font        = New-Object System.Drawing.Font($GlobalFont, 8.5)
+    Margin      = New-Object System.Windows.Forms.Padding(0, 2, 0, 0)
+    UseMnemonic = $false
+}
+$Banner.Controls.AddRange(@($BannerTitle, $BannerDesc))
+$Flow.Controls.Add($Banner)
 
     # Sidebar Item Panel
     $ItemPanel = New-Object System.Windows.Forms.Panel -Property @{
