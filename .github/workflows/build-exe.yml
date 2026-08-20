@@ -27,7 +27,7 @@ jobs:
       - name: Compile AdminWorks.ps1
         shell: powershell
         run: |
-          Invoke-ps2exe -inputFile ".\AdminWorks.ps1" -outputFile ".\AdminWorks.exe" -noConsole -title "AdminWorks" -company "Kushagra Karira" -version "1.0.0.0" -requireAdmin -iconFile ".\app-icon.ico"
+          Invoke-ps2exe -inputFile ".\AdminWorks.ps1" -outputFile ".\AdminWorks.exe" -noConsole -title "AdminWorks" -company "Kushagra Karira" -version "5" -requireAdmin -iconFile ".\app.ico"
 
       - name: Upload EXE Artifacts
         uses: actions/upload-artifact@v4
