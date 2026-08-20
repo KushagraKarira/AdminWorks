@@ -1,0 +1,41 @@
+name: Compile PowerShell to EXE
+
+# Trigger the workflow on pushes to main, or manually via the Actions tab
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Executables
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install PS2EXE Module
+        shell: powershell
+        run: |
+          Install-Module -Name ps2exe -Force -Scope CurrentUser -AcceptLicense
+
+      - name: Compile AdminWorks.ps1
+        shell: powershell
+        run: |
+          # Using -noConsole is required so a blank CMD window doesn't stay open behind your GUI
+          Invoke-ps2exe -inputFile ".\AdminWorks.ps1" -outputFile ".\AdminWorks.exe" -noConsole -title "AdminWorks" -company "YourName" -version "1.0.0.0"
+
+      - name: Compile AdminWorksPro.ps1
+        shell: powershell
+        run: |
+          Invoke-ps2exe -inputFile ".\AdminWorksPro.ps1" -outputFile ".\AdminWorksPro.exe" -noConsole -title "AdminWorks Pro" -company "YourName" -version "4.1.0.0"
+
+      - name: Upload EXE Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AdminWorks-Executables
+          path: |
+            .\AdminWorks.exe
+            .\AdminWorksPro.exe
+          retention-days: 7
