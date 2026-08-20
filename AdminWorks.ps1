@@ -1,6 +1,6 @@
 <#
 ================================================================================
-  ADMINWORKS PRO v4.6 - Enterprise Windows Administration & Optimization Suite
+  ADMINWORKS PRO v4.7 - Enterprise Windows Administration & Optimization Suite
   Compatible with Windows 10 & Windows 11
 ================================================================================
 #>
@@ -74,7 +74,7 @@ if ($CheckIcon.Name -ne $IconFont) {
     if ($CheckIcon2.Name -ne $IconFont) { $IconFont = "Segoe UI Symbol" }
 }
 
-# --- [Native Windows Icon Glyphs (Segoe MDL2 Assets / Fluent Icons)] ---
+# --- [Native Windows Icon Glyphs] ---
 $UI = @{
     Bullet     = [char]0x2022
     Dot        = [char]0x25CF
@@ -153,14 +153,12 @@ $Header = New-Object System.Windows.Forms.Panel -Property @{
 }
 $Form.Controls.Add($Header)
 
-# Left: Brand Container
+# 1. Left: Brand Container (Logo, Title, Subtitle)
 $BrandPanel = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Left"
     Width     = 235
     BackColor = $script:Theme.Header
 }
-$Header.Controls.Add($BrandPanel)
-
 $LogoIcon = New-Object System.Windows.Forms.Label -Property @{
     Text        = $UI.Perf; Location = New-Object System.Drawing.Point(16, 12); Size = New-Object System.Drawing.Size(26, 26)
     ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($IconFont, 13); UseMnemonic = $false
@@ -170,7 +168,7 @@ $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
     ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 12, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false
 }
 $TitleSub = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "ENTERPRISE SUITE v4.6  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(46, 36); AutoSize = $true
+    Text        = "ENTERPRISE SUITE v4.7  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(46, 36); AutoSize = $true
     ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
     Cursor      = [System.Windows.Forms.Cursors]::Hand; UseMnemonic = $false
 }
@@ -179,9 +177,8 @@ $TitleSub.Add_MouseEnter({ $this.ForeColor = $script:Theme.TextMain })
 $TitleSub.Add_MouseLeave({ $this.ForeColor = $script:Theme.AccentGlow })
 $BrandPanel.Controls.AddRange(@($LogoIcon, $TitleLbl, $TitleSub))
 
-# Right: Window Control Box
+# 2. Far Right: Window Control Box (Min, Max, Close)
 $CtrlBox = New-Object System.Windows.Forms.Panel -Property @{Dock = "Right"; Width = 135; BackColor = $script:Theme.Header}
-$Header.Controls.Add($CtrlBox)
 
 function New-WindowBtn($Glyph, $X, $HoverColor, $Action) {
     $B = New-Object System.Windows.Forms.Button -Property @{
@@ -210,21 +207,17 @@ $BtnMax   = New-WindowBtn $UI.Maximize 46 $script:Theme.CardHover {
 }
 $BtnMin   = New-WindowBtn $UI.Minimize 4 $script:Theme.CardHover { $Form.WindowState = "Minimized" }
 
-# Right: Search Box Container
+# 3. Right: Search Box Container (Docks to the left of CtrlBox)
 $SearchWrapper = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Right"
     Width     = 290
     Padding   = New-Object System.Windows.Forms.Padding(6, 16, 10, 16)
     BackColor = $script:Theme.Header
 }
-$Header.Controls.Add($SearchWrapper)
-
 $SearchPill = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Fill"
     BackColor = $script:Theme.Sidebar
 }
-$SearchWrapper.Controls.Add($SearchPill)
-
 $SearchIconLbl = New-Object System.Windows.Forms.Label -Property @{
     Text        = $UI.Search; Location = New-Object System.Drawing.Point(8, 7); Size = New-Object System.Drawing.Size(20, 20)
     ForeColor   = $script:Theme.TextSubtle; Font = New-Object System.Drawing.Font($IconFont, 9); UseMnemonic = $false
@@ -241,15 +234,14 @@ $SearchBox.Add_LostFocus({
     if ([string]::IsNullOrWhiteSpace($this.Text)) { $this.Text = $SearchPlaceholder; $this.ForeColor = $script:Theme.TextSubtle } 
 })
 $SearchPill.Controls.AddRange(@($SearchIconLbl, $SearchBox))
+$SearchWrapper.Controls.Add($SearchPill)
 
-# Center: System Info Badge
+# 4. Center: System Info Badge (Fills remaining center space)
 $CenterPanel = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Fill"
     BackColor = $script:Theme.Header
     Padding   = New-Object System.Windows.Forms.Padding(12, 0, 12, 0)
 }
-$Header.Controls.Add($CenterPanel)
-
 $LocalIP = "Scanning..."
 try {
     $ipObj = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.PrefixOrigin -match 'Dhcp|Manual' -and $_.InterfaceAlias -notmatch 'Loopback|Virtual|vEthernet' } | Select-Object -First 1
@@ -265,7 +257,14 @@ $SysBadge = New-Object System.Windows.Forms.Label -Property @{
 }
 $CenterPanel.Controls.Add($SysBadge)
 
-# Dragging Support
+# Add all Header controls and set deterministic Z-Order
+$Header.Controls.AddRange(@($CenterPanel, $BrandPanel, $SearchWrapper, $CtrlBox))
+$BrandPanel.BringToFront()      # Far Left
+$SearchWrapper.BringToFront()   # Next to CtrlBox
+$CtrlBox.BringToFront()         # Far Right (Outer-most edge)
+$CenterPanel.SendToBack()       # Fills center between Left and Right
+
+# Window Dragging Support
 $dragHandler = {
     if ($_.Button -eq [System.Windows.Forms.MouseButtons]::Left) {
         [NativeMethods]::ReleaseCapture() | Out-Null
@@ -1346,5 +1345,5 @@ $Form.Add_FormClosing({
     if ($script:CpuCounter) { $script:CpuCounter.Dispose() }
 })
 
-Write-Log "AdminWorks Pro Suite v4.6 loaded and ready." "Success"
+Write-Log "AdminWorks Pro Suite v4.7 loaded and ready." "Success"
 [void]$Form.ShowDialog()
