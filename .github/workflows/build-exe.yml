@@ -1,4 +1,4 @@
-name: Compile PowerShell to EXE
+name: Compile PowerShell to EXE & Auto-Release
 
 # Trigger the workflow on pushes to main, or manually via the Actions tab
 on:
@@ -6,9 +6,13 @@ on:
     branches: [ "main", "master" ]
   workflow_dispatch:
 
+# Grant the workflow permission to write to your repository releases
+permissions:
+  contents: write
+
 jobs:
   build:
-    name: Build Executables
+    name: Build and Release Executables
     runs-on: windows-latest
 
     steps:
@@ -23,7 +27,6 @@ jobs:
       - name: Compile AdminWorks.ps1
         shell: powershell
         run: |
-          # Using -noConsole is required so a blank CMD window doesn't stay open behind your GUI
           Invoke-ps2exe -inputFile ".\AdminWorks.ps1" -outputFile ".\AdminWorks.exe" -noConsole -title "AdminWorks" -company "YourName" -version "1.0.0.0"
 
       - name: Compile AdminWorksPro.ps1
@@ -39,3 +42,16 @@ jobs:
             .\AdminWorks.exe
             .\AdminWorksPro.exe
           retention-days: 7
+
+      # Automatically create a GitHub Release and attach the compiled EXEs
+      - name: Auto Release EXEs
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: AdminWorks Build ${{ github.run_number }}
+          body: "Automated build of AdminWorks and AdminWorks Pro executables."
+          files: |
+            .\AdminWorks.exe
+            .\AdminWorksPro.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
