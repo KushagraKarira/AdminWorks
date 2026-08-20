@@ -1,7 +1,7 @@
 <#
 ================================================================================
-  ADMINWORKS PRO v4.3 - Enterprise Windows Administration & Optimization Suite
-  Compatible with Windows 10 & Windows 11
+  ADMINWORKS PRO v4.4 - Enterprise Windows Administration & Optimization Suite
+  Compatible with Windows 10 & Windows 11 (Responsive Multi-Resolution Edition)
 ================================================================================
 #>
 
@@ -47,7 +47,7 @@ $script:Theme = @{
     Sidebar       = [System.Drawing.Color]::FromArgb(21, 26, 36)       # Sidebar Panel
     SidebarActive = [System.Drawing.Color]::FromArgb(30, 38, 54)       # Active Tab
     SidebarHover  = [System.Drawing.Color]::FromArgb(26, 33, 46)       # Hover Tab
-    Card          = [System.Drawing.Color]::FromArgb(26, 32, 44)       # Card Surface
+    Card          = [System.Drawing.Color]::FromArgb(25, 31, 42)       # Card Surface
     CardHover     = [System.Drawing.Color]::FromArgb(34, 42, 58)       # Card Hover
     CardBorder    = [System.Drawing.Color]::FromArgb(44, 53, 74)       # Subtle Border
     Accent        = [System.Drawing.Color]::FromArgb(59, 130, 246)     # Electric Blue
@@ -61,7 +61,7 @@ $script:Theme = @{
     TerminalBg    = [System.Drawing.Color]::FromArgb(7, 9, 12)         # Terminal Black
 }
 
-# Standard & Icon Fonts (Native Windows 10/11 Segoe MDL2 Assets fallback)
+# Standard & Icon Fonts
 $GlobalFont = "Segoe UI Variable Display"
 $CheckFont = New-Object System.Drawing.Font($GlobalFont, 10)
 if ($CheckFont.Name -ne $GlobalFont) { $GlobalFont = "Segoe UI" }
@@ -74,9 +74,8 @@ if ($CheckIcon.Name -ne $IconFont) {
     if ($CheckIcon2.Name -ne $IconFont) { $IconFont = "Segoe UI Symbol" }
 }
 
-# --- [Native Windows Icon Glyphs (Segoe MDL2 Assets / Fluent Icons)] ---
+# --- [Native Windows Icon Glyphs] ---
 $UI = @{
-    # Controls & UI Elements
     Bullet     = [char]0x2022
     Dot        = [char]0x25CF
     Close      = [char]0xE8BB
@@ -118,8 +117,8 @@ if (-not (Test-Path $script:BackupDir)) { New-Item -ItemType Directory -Path $sc
 
 # --- [Dynamic Screen Resolution Adaptation] ---
 $ScreenBounds  = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
-$InitialWidth  = [math]::Min(1320, [int]($ScreenBounds.Width * 0.92))
-$InitialHeight = [math]::Min(920, [int]($ScreenBounds.Height * 0.90))
+$InitialWidth  = [math]::Max(960, [math]::Min(1280, [int]($ScreenBounds.Width * 0.90)))
+$InitialHeight = [math]::Max(640, [math]::Min(860, [int]($ScreenBounds.Height * 0.88)))
 
 # --- [Main Form Window] ---
 $Form = New-Object System.Windows.Forms.Form
@@ -128,7 +127,7 @@ $Form.Size            = New-Object System.Drawing.Size($InitialWidth, $InitialHe
 $Form.BackColor       = $script:Theme.Bg
 $Form.StartPosition   = "CenterScreen"
 $Form.FormBorderStyle = "None"
-$Form.MinimumSize     = New-Object System.Drawing.Size(980, 700)
+$Form.MinimumSize     = New-Object System.Drawing.Size(920, 620)
 $Form.KeyPreview      = $true
 
 try {
@@ -146,108 +145,50 @@ try {
     }
 } catch {}
 
-# --- [Header Panel] ---
+# --- [Header: Structured, Non-Overlapping Layout] ---
 $Header = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Top"
-    Height    = 70
+    Height    = 66
     BackColor = $script:Theme.Header
 }
 $Form.Controls.Add($Header)
 
-# App Logo / Icon
+# Left: Brand Container (Aligned with Sidebar)
+$BrandPanel = New-Object System.Windows.Forms.Panel -Property @{
+    Dock      = "Left"
+    Width     = 235
+    BackColor = $script:Theme.Header
+}
+$Header.Controls.Add($BrandPanel)
+
 $LogoIcon = New-Object System.Windows.Forms.Label -Property @{
-    Text        = $UI.Perf
-    Location    = New-Object System.Drawing.Point(18, 14)
-    Size        = New-Object System.Drawing.Size(26, 26)
-    ForeColor   = $script:Theme.AccentGlow
-    Font        = New-Object System.Drawing.Font($IconFont, 13)
-    UseMnemonic = $false
+    Text        = $UI.Perf; Location = New-Object System.Drawing.Point(16, 12); Size = New-Object System.Drawing.Size(26, 26)
+    ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($IconFont, 13); UseMnemonic = $false
 }
 $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "ADMINWORKS"
-    Location    = New-Object System.Drawing.Point(46, 14); AutoSize = $true
-    ForeColor   = $script:Theme.TextMain
-    Font        = New-Object System.Drawing.Font($GlobalFont, 12.5, [System.Drawing.FontStyle]::Bold)
-    UseMnemonic = $false
+    Text        = "ADMINWORKS"; Location = New-Object System.Drawing.Point(44, 12); AutoSize = $true
+    ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 12, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false
 }
 $TitleSub = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "ENTERPRISE SUITE v4.3  $($UI.Bullet)  BY KUSHAGRA KARIRA"
-    Location    = New-Object System.Drawing.Point(48, 40); AutoSize = $true
-    ForeColor   = $script:Theme.AccentGlow
-    Font        = New-Object System.Drawing.Font($GlobalFont, 7.5, [System.Drawing.FontStyle]::Bold)
-    Cursor      = [System.Windows.Forms.Cursors]::Hand
-    UseMnemonic = $false
+    Text        = "ENTERPRISE SUITE v4.4  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(46, 36); AutoSize = $true
+    ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
+    Cursor      = [System.Windows.Forms.Cursors]::Hand; UseMnemonic = $false
 }
 $TitleSub.Add_Click({ Start-Process "https://github.com/KushagraKarira/AdminWorks" })
 $TitleSub.Add_MouseEnter({ $this.ForeColor = $script:Theme.TextMain })
 $TitleSub.Add_MouseLeave({ $this.ForeColor = $script:Theme.AccentGlow })
-$Header.Controls.AddRange(@($LogoIcon, $TitleLbl, $TitleSub))
+$BrandPanel.Controls.AddRange(@($LogoIcon, $TitleLbl, $TitleSub))
 
-# Smooth Header Dragging
-$Header.Add_MouseDown({
-    if ($_.Button -eq [System.Windows.Forms.MouseButtons]::Left) {
-        [NativeMethods]::ReleaseCapture() | Out-Null
-        [NativeMethods]::SendMessage($Form.Handle, 0xA1, 0x2, 0) | Out-Null
-    }
-})
-
-# System Info Badge
-$LocalIP = "Scanning..."
-try {
-    $ipObj = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.PrefixOrigin -match 'Dhcp|Manual' -and $_.InterfaceAlias -notmatch 'Loopback|Virtual|vEthernet' } | Select-Object -First 1
-    if ($ipObj) { $LocalIP = $ipObj.IPAddress } else { $LocalIP = "No LAN" }
-} catch { $LocalIP = "Offline" }
-
-$OSInfo = (Get-CimInstance Win32_OperatingSystem)
-$SysBadge = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "$($env:COMPUTERNAME)  $($UI.Bullet)  IP: $LocalIP  $($UI.Bullet)  $($OSInfo.Caption)"
-    Location    = New-Object System.Drawing.Point(280, 26); Size = New-Object System.Drawing.Size(420, 20)
-    ForeColor   = $script:Theme.TextMuted; Font = New-Object System.Drawing.Font($GlobalFont, 8.5)
-    UseMnemonic = $false
-}
-$Header.Controls.Add($SysBadge)
-
-# Search Input Container
-$SearchPanel = New-Object System.Windows.Forms.Panel -Property @{
-    Location  = New-Object System.Drawing.Point(($Header.Width - 490), 18); Size = New-Object System.Drawing.Size(330, 34)
-    BackColor = $script:Theme.Sidebar; Anchor = [System.Windows.Forms.AnchorStyles]"Top, Right"
-}
-$SearchIconLbl = New-Object System.Windows.Forms.Label -Property @{
-    Text        = $UI.Search
-    Location    = New-Object System.Drawing.Point(8, 7); Size = New-Object System.Drawing.Size(22, 20)
-    ForeColor   = $script:Theme.TextSubtle; Font = New-Object System.Drawing.Font($IconFont, 9.5)
-    UseMnemonic = $false
-}
-$SearchBox = New-Object System.Windows.Forms.TextBox -Property @{
-    BorderStyle = "None"; BackColor = $script:Theme.Sidebar; ForeColor = $script:Theme.TextSubtle
-    Font = New-Object System.Drawing.Font($GlobalFont, 9.5); Location = New-Object System.Drawing.Point(34, 8)
-    Width = 285; Text = $SearchPlaceholder
-}
-$SearchBox.Add_GotFocus({ 
-    if ($this.Text -eq $SearchPlaceholder) { 
-        $this.Text = ""
-        $this.ForeColor = $script:Theme.TextMain 
-    } 
-})
-$SearchBox.Add_LostFocus({ 
-    if ([string]::IsNullOrWhiteSpace($this.Text)) { 
-        $this.Text = $SearchPlaceholder
-        $this.ForeColor = $script:Theme.TextSubtle 
-    } 
-})
-$SearchPanel.Controls.AddRange(@($SearchIconLbl, $SearchBox))
-$Header.Controls.Add($SearchPanel)
-
-# Window Controls
-$CtrlBox = New-Object System.Windows.Forms.Panel -Property @{Dock="Right"; Width=140}
+# Right: Window Control Box
+$CtrlBox = New-Object System.Windows.Forms.Panel -Property @{Dock = "Right"; Width = 135; BackColor = $script:Theme.Header}
 $Header.Controls.Add($CtrlBox)
 
 function New-WindowBtn($Glyph, $X, $HoverColor, $Action) {
     $B = New-Object System.Windows.Forms.Button -Property @{
-        Text        = $Glyph; Size = New-Object System.Drawing.Size(42, 34); 
-        Location    = New-Object System.Drawing.Point($X, 18); FlatStyle = "Flat"; 
+        Text        = $Glyph; Size = New-Object System.Drawing.Size(40, 32); 
+        Location    = New-Object System.Drawing.Point($X, 16); FlatStyle = "Flat"; 
         ForeColor   = $script:Theme.TextMuted; Tag = $HoverColor
-        Font        = New-Object System.Drawing.Font($IconFont, 9)
+        Font        = New-Object System.Drawing.Font($IconFont, 8.5)
         UseMnemonic = $false
     }
     $B.FlatAppearance.BorderSize = 0
@@ -257,7 +198,7 @@ function New-WindowBtn($Glyph, $X, $HoverColor, $Action) {
     $CtrlBox.Controls.Add($B)
     return $B
 }
-$BtnClose = New-WindowBtn $UI.Close 90 $script:Theme.Danger { $Form.Close() }
+$BtnClose = New-WindowBtn $UI.Close 88 $script:Theme.Danger { $Form.Close() }
 $BtnMax   = New-WindowBtn $UI.Maximize 46 $script:Theme.CardHover { 
     if ($Form.WindowState -eq "Maximized") { 
         $Form.WindowState = "Normal"
@@ -267,7 +208,74 @@ $BtnMax   = New-WindowBtn $UI.Maximize 46 $script:Theme.CardHover {
         $this.Text = $UI.Restore
     } 
 }
-$BtnMin   = New-WindowBtn $UI.Minimize 2 $script:Theme.CardHover { $Form.WindowState = "Minimized" }
+$BtnMin   = New-WindowBtn $UI.Minimize 4 $script:Theme.CardHover { $Form.WindowState = "Minimized" }
+
+# Right: Search Box Container
+$SearchWrapper = New-Object System.Windows.Forms.Panel -Property @{
+    Dock      = "Right"
+    Width     = 290
+    Padding   = New-Object System.Windows.Forms.Padding(6, 16, 10, 16)
+    BackColor = $script:Theme.Header
+}
+$Header.Controls.Add($SearchWrapper)
+
+$SearchPill = New-Object System.Windows.Forms.Panel -Property @{
+    Dock      = "Fill"
+    BackColor = $script:Theme.Sidebar
+}
+$SearchWrapper.Controls.Add($SearchPill)
+
+$SearchIconLbl = New-Object System.Windows.Forms.Label -Property @{
+    Text        = $UI.Search; Location = New-Object System.Drawing.Point(8, 7); Size = New-Object System.Drawing.Size(20, 20)
+    ForeColor   = $script:Theme.TextSubtle; Font = New-Object System.Drawing.Font($IconFont, 9); UseMnemonic = $false
+}
+$SearchBox = New-Object System.Windows.Forms.TextBox -Property @{
+    BorderStyle = "None"; BackColor = $script:Theme.Sidebar; ForeColor = $script:Theme.TextSubtle
+    Font = New-Object System.Drawing.Font($GlobalFont, 9); Location = New-Object System.Drawing.Point(30, 8)
+    Width = 236; Text = $SearchPlaceholder
+}
+$SearchBox.Add_GotFocus({ 
+    if ($this.Text -eq $SearchPlaceholder) { $this.Text = ""; $this.ForeColor = $script:Theme.TextMain } 
+})
+$SearchBox.Add_LostFocus({ 
+    if ([string]::IsNullOrWhiteSpace($this.Text)) { $this.Text = $SearchPlaceholder; $this.ForeColor = $script:Theme.TextSubtle } 
+})
+$SearchPill.Controls.AddRange(@($SearchIconLbl, $SearchBox))
+
+# Center: System Info Badge (Fills middle without overlapping)
+$CenterPanel = New-Object System.Windows.Forms.Panel -Property @{
+    Dock      = "Fill"
+    BackColor = $script:Theme.Header
+    Padding   = New-Object System.Windows.Forms.Padding(12, 0, 12, 0)
+}
+$Header.Controls.Add($CenterPanel)
+
+$LocalIP = "Scanning..."
+try {
+    $ipObj = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.PrefixOrigin -match 'Dhcp|Manual' -and $_.InterfaceAlias -notmatch 'Loopback|Virtual|vEthernet' } | Select-Object -First 1
+    if ($ipObj) { $LocalIP = $ipObj.IPAddress } else { $LocalIP = "No LAN" }
+} catch { $LocalIP = "Offline" }
+
+$OSInfo = (Get-CimInstance Win32_OperatingSystem)
+$SysBadge = New-Object System.Windows.Forms.Label -Property @{
+    Text          = "$($env:COMPUTERNAME)  $($UI.Bullet)  IP: $LocalIP  $($UI.Bullet)  $($OSInfo.Caption)"
+    Dock          = "Fill"; TextAlign = "MiddleCenter"
+    ForeColor     = $script:Theme.TextMuted; Font = New-Object System.Drawing.Font($GlobalFont, 8.5)
+    AutoEllipsis  = $true; UseMnemonic = $false
+}
+$CenterPanel.Controls.Add($SysBadge)
+
+# Dragging Support across Header Regions
+$dragHandler = {
+    if ($_.Button -eq [System.Windows.Forms.MouseButtons]::Left) {
+        [NativeMethods]::ReleaseCapture() | Out-Null
+        [NativeMethods]::SendMessage($Form.Handle, 0xA1, 0x2, 0) | Out-Null
+    }
+}
+$Header.Add_MouseDown($dragHandler)
+$BrandPanel.Add_MouseDown($dragHandler)
+$CenterPanel.Add_MouseDown($dragHandler)
+$SysBadge.Add_MouseDown($dragHandler)
 
 # --- [Sidebar Navigation Container] ---
 $Sidebar = New-Object System.Windows.Forms.Panel -Property @{
@@ -280,18 +288,18 @@ $Form.Controls.Add($Sidebar)
 # --- [Bottom Console Drawer] ---
 $LogContainer = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Bottom"
-    Height    = 200
+    Height    = 180
     BackColor = $script:Theme.TerminalBg
-    Padding   = New-Object System.Windows.Forms.Padding(16, 6, 16, 12)
+    Padding   = New-Object System.Windows.Forms.Padding(14, 4, 14, 8)
 }
 $Form.Controls.Add($LogContainer)
 
 # Console Toolbar
-$TermHeader = New-Object System.Windows.Forms.Panel -Property @{Dock="Top"; Height=32; BackColor=$script:Theme.TerminalBg}
+$TermHeader = New-Object System.Windows.Forms.Panel -Property @{Dock = "Top"; Height = 30; BackColor = $script:Theme.TerminalBg}
 $LogContainer.Controls.Add($TermHeader)
 
 $TermTitle = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "$($UI.Dot) CONSOLE OUTPUT"; Location = New-Object System.Drawing.Point(0, 6); AutoSize = $true
+    Text        = "$($UI.Dot) CONSOLE OUTPUT & EXECUTION LOG"; Location = New-Object System.Drawing.Point(0, 5); AutoSize = $true
     ForeColor   = $script:Theme.Success; Font = New-Object System.Drawing.Font($GlobalFont, 8, [System.Drawing.FontStyle]::Bold)
     UseMnemonic = $false
 }
@@ -299,7 +307,7 @@ $TermHeader.Controls.Add($TermTitle)
 
 $TermBtnContainer = New-Object System.Windows.Forms.FlowLayoutPanel -Property @{
     Dock          = "Right"
-    Width         = 430
+    Width         = 390
     Height        = 28
     FlowDirection = "RightToLeft"
     BackColor     = $script:Theme.TerminalBg
@@ -307,19 +315,19 @@ $TermBtnContainer = New-Object System.Windows.Forms.FlowLayoutPanel -Property @{
 $TermHeader.Controls.Add($TermBtnContainer)
 
 $LogBox = New-Object System.Windows.Forms.RichTextBox -Property @{
-    Dock = "Fill"; BackColor = [System.Drawing.Color]::FromArgb(5, 6, 8)
-    ForeColor = $script:Theme.TextMain; BorderStyle = "None"; ReadOnly = $true
-    Font = New-Object System.Drawing.Font("Consolas", 9.5)
+    Dock        = "Fill"; BackColor = [System.Drawing.Color]::FromArgb(5, 6, 8)
+    ForeColor   = $script:Theme.TextMain; BorderStyle = "None"; ReadOnly = $true
+    Font        = New-Object System.Drawing.Font("Consolas", 9)
 }
 $LogContainer.Controls.Add($LogBox)
 $LogBox.BringToFront()
 
 function New-TermBtn($Text, $Action) {
     $Btn = New-Object System.Windows.Forms.Button -Property @{
-        Text        = $Text; Size = New-Object System.Drawing.Size(85, 24)
+        Text        = $Text; Size = New-Object System.Drawing.Size(80, 22)
         FlatStyle   = "Flat"; BackColor = $script:Theme.Card; ForeColor = $script:Theme.TextMuted
         Font        = New-Object System.Drawing.Font($GlobalFont, 7.5, [System.Drawing.FontStyle]::Bold)
-        Margin      = New-Object System.Windows.Forms.Padding(4, 2, 4, 2)
+        Margin      = New-Object System.Windows.Forms.Padding(3, 1, 3, 1)
         Cursor      = [System.Windows.Forms.Cursors]::Hand
         UseMnemonic = $false
     }
@@ -330,22 +338,21 @@ function New-TermBtn($Text, $Action) {
     $TermBtnContainer.Controls.Add($Btn)
 }
 
-# Collapse/Expand Toggle
 $BtnToggleDrawer = New-Object System.Windows.Forms.Button -Property @{
-    Text        = "COLLAPSE"; Size = New-Object System.Drawing.Size(95, 24)
+    Text        = "COLLAPSE"; Size = New-Object System.Drawing.Size(88, 22)
     FlatStyle   = "Flat"; BackColor = $script:Theme.Card; ForeColor = $script:Theme.AccentGlow
     Font        = New-Object System.Drawing.Font($GlobalFont, 7.5, [System.Drawing.FontStyle]::Bold)
-    Margin      = New-Object System.Windows.Forms.Padding(4, 2, 4, 2)
+    Margin      = New-Object System.Windows.Forms.Padding(3, 1, 3, 1)
     Cursor      = [System.Windows.Forms.Cursors]::Hand
     UseMnemonic = $false
 }
 $BtnToggleDrawer.FlatAppearance.BorderSize = 0
 $BtnToggleDrawer.Add_Click({
     if ($LogContainer.Height -gt 40) {
-        $LogContainer.Height = 36
+        $LogContainer.Height = 32
         $BtnToggleDrawer.Text = "EXPAND"
     } else {
-        $LogContainer.Height = 200
+        $LogContainer.Height = 180
         $BtnToggleDrawer.Text = "COLLAPSE"
     }
 })
@@ -387,11 +394,11 @@ $MainArea.BringToFront()
 # Responsive TableLayoutPanel for Live Stats
 $TelemetryBar = New-Object System.Windows.Forms.TableLayoutPanel -Property @{
     Dock        = "Top"
-    Height      = 66
+    Height      = 64
     BackColor   = $script:Theme.SidebarActive
     ColumnCount = 4
     RowCount    = 1
-    Padding     = New-Object System.Windows.Forms.Padding(12, 6, 12, 6)
+    Padding     = New-Object System.Windows.Forms.Padding(10, 5, 10, 5)
 }
 [void]$TelemetryBar.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 25)))
 [void]$TelemetryBar.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 25)))
@@ -413,12 +420,12 @@ function New-StatWidget($IconGlyph, $Title) {
     }
     $LTitle = New-Object System.Windows.Forms.Label -Property @{
         Text        = $Title; Location = New-Object System.Drawing.Point(28, 7); AutoSize = $true
-        ForeColor   = $script:Theme.TextMuted; Font = New-Object System.Drawing.Font($GlobalFont, 7.5, [System.Drawing.FontStyle]::Bold)
+        ForeColor   = $script:Theme.TextMuted; Font = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
         UseMnemonic = $false
     }
     $LVal = New-Object System.Windows.Forms.Label -Property @{
-        Text        = "--"; Location = New-Object System.Drawing.Point(28, 26); AutoSize = $true
-        ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 9.5, [System.Drawing.FontStyle]::Bold)
+        Text        = "--"; Location = New-Object System.Drawing.Point(28, 24); AutoSize = $true
+        ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 9, [System.Drawing.FontStyle]::Bold)
         UseMnemonic = $false
     }
     $P.Controls.AddRange(@($LIcon, $LTitle, $LVal))
@@ -444,16 +451,51 @@ $script:CategoryPanels = @{}
 $script:SidebarItems = @{}
 $script:CurrentTabId = "Presets"
 
+$ViewContainer = New-Object System.Windows.Forms.Panel -Property @{
+    Dock      = "Fill"
+    BackColor = $script:Theme.Bg
+}
+$MainArea.Controls.Add($ViewContainer)
+$ViewContainer.BringToFront()
+
+# --- [Dynamic Responsive Card Sizing Function] ---
+function Update-ResponsiveLayout {
+    if (-not $ViewContainer -or $ViewContainer.ClientSize.Width -le 100) { return }
+    $availWidth = $ViewContainer.ClientSize.Width - 36
+
+    # Select dynamic column count based on available screen width
+    if ($availWidth -ge 1360) {
+        $cols = 4
+    } elseif ($availWidth -ge 960) {
+        $cols = 3
+    } elseif ($availWidth -ge 580) {
+        $cols = 2
+    } else {
+        $cols = 1
+    }
+
+    $spacing = 12
+    $targetWidth = [math]::Floor(($availWidth - ($spacing * ($cols - 1))) / $cols)
+    if ($targetWidth -lt 280) { $targetWidth = 280 }
+
+    foreach ($card in $script:AllCards) {
+        if ($card.Panel.Width -ne $targetWidth) {
+            $card.Panel.Width = $targetWidth
+        }
+    }
+}
+$ViewContainer.Add_SizeChanged({ Update-ResponsiveLayout })
+
 function New-TweakCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc, $Action) {
     $P = New-Object System.Windows.Forms.Panel -Property @{
-        Size      = New-Object System.Drawing.Size(330, 146)
+        Size      = New-Object System.Drawing.Size(320, 146)
         BackColor = $script:Theme.Card
-        Margin    = New-Object System.Windows.Forms.Padding(8)
+        Margin    = New-Object System.Windows.Forms.Padding(6)
     }
 
     $TagLbl = New-Object System.Windows.Forms.Label -Property @{
         Text        = $CategoryTag.ToUpper()
-        Location    = New-Object System.Drawing.Point(14, 10); AutoSize = $true
+        Location    = New-Object System.Drawing.Point(12, 8); AutoSize = $true
         ForeColor   = $script:Theme.AccentGlow
         Font        = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
         UseMnemonic = $false
@@ -461,26 +503,32 @@ function New-TweakCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc,
 
     $IconLbl = New-Object System.Windows.Forms.Label -Property @{
         Text        = $IconGlyph
-        Location    = New-Object System.Drawing.Point(12, 28); Size = New-Object System.Drawing.Size(20, 22)
+        Location    = New-Object System.Drawing.Point(10, 26); Size = New-Object System.Drawing.Size(20, 20)
         ForeColor   = $script:Theme.AccentGlow
         Font        = New-Object System.Drawing.Font($IconFont, 9.5)
         UseMnemonic = $false
     }
 
     $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
-        Text        = $Title
-        Location    = New-Object System.Drawing.Point(34, 28); Size = New-Object System.Drawing.Size(280, 22)
-        ForeColor   = $script:Theme.TextMain
-        Font        = New-Object System.Drawing.Font($GlobalFont, 9.5, [System.Drawing.FontStyle]::Bold)
-        UseMnemonic = $false
+        Text         = $Title
+        Location     = New-Object System.Drawing.Point(32, 26)
+        Size         = New-Object System.Drawing.Size(270, 20)
+        Anchor       = [System.Windows.Forms.AnchorStyles]"Top, Left, Right"
+        ForeColor    = $script:Theme.TextMain
+        Font         = New-Object System.Drawing.Font($GlobalFont, 9, [System.Drawing.FontStyle]::Bold)
+        AutoEllipsis = $true
+        UseMnemonic  = $false
     }
 
     $DescLbl = New-Object System.Windows.Forms.Label -Property @{
-        Text        = $Desc
-        Location    = New-Object System.Drawing.Point(14, 54); Size = New-Object System.Drawing.Size(302, 46)
-        ForeColor   = $script:Theme.TextMuted
-        Font        = New-Object System.Drawing.Font($GlobalFont, 8)
-        UseMnemonic = $false
+        Text         = $Desc
+        Location     = New-Object System.Drawing.Point(12, 50)
+        Size         = New-Object System.Drawing.Size(294, 48)
+        Anchor       = [System.Windows.Forms.AnchorStyles]"Top, Left, Right"
+        ForeColor    = $script:Theme.TextMuted
+        Font         = New-Object System.Drawing.Font($GlobalFont, 8)
+        AutoEllipsis = $true
+        UseMnemonic  = $false
     }
 
     $P.Add_MouseEnter({ $this.BackColor = $script:Theme.CardHover })
@@ -490,12 +538,13 @@ function New-TweakCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc,
 
     $Btn = New-Object System.Windows.Forms.Button -Property @{
         Text        = "APPLY"
-        Size        = New-Object System.Drawing.Size(95, 28)
-        Location    = New-Object System.Drawing.Point(220, 108)
+        Size        = New-Object System.Drawing.Size(92, 26)
+        Location    = New-Object System.Drawing.Point(216, 110)
+        Anchor      = [System.Windows.Forms.AnchorStyles]"Bottom, Right"
         FlatStyle   = "Flat"
         BackColor   = $script:Theme.SidebarActive
         ForeColor   = $script:Theme.TextMain
-        Font        = New-Object System.Drawing.Font($GlobalFont, 8, [System.Drawing.FontStyle]::Bold)
+        Font        = New-Object System.Drawing.Font($GlobalFont, 7.5, [System.Drawing.FontStyle]::Bold)
         Tag         = $ActionString
         Cursor      = [System.Windows.Forms.Cursors]::Hand
         UseMnemonic = $false
@@ -584,23 +633,16 @@ function New-TweakCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc,
 
 # --- [Sidebar Tabs Navigation Definition] ---
 $TabList = @(
-    @{ Id = "Presets";   Icon = $UI.Presets;  Name = "Preset Profiles"; Desc = "1-Click Optimization Profiles" },
-    @{ Id = "Maint";     Icon = $UI.Maint;    Name = "Maintenance";     Desc = "DISM, SFC, Component cleanup, Update fixes" },
-    @{ Id = "Perf";      Icon = $UI.Perf;     Name = "Performance";     Desc = "Power plans, CPU priority, latency & RAM" },
-    @{ Id = "Net";       Icon = $UI.Net;      Name = "Network & DNS";   Desc = "DNS benchmarks, Wi-Fi keys, TCP stack & ports" },
-    @{ Id = "Privacy";   Icon = $UI.Privacy;  Name = "Privacy & Bloat"; Desc = "Telemetry removal, Bing, Copilot & Debloat" },
-    @{ Id = "Context";   Icon = $UI.Context;  Name = "Shell & Explorer";Desc = "Context menus, file extensions & UI tweaks" },
-    @{ Id = "Hardware";  Icon = $UI.Hardware; Name = "Hardware Audit";  Desc = "SMART drives, RAM banks, battery & GPU stats" },
-    @{ Id = "Apps";      Icon = $UI.Apps;     Name = "Software Hub";    Desc = "Winget package updater & curated installer" },
-    @{ Id = "Admin";     Icon = $UI.Admin;    Name = "Admin Utilities"; Desc = "GodMode, Windows tools hub & System Restore" }
+    @{ Id = "Presets";   Icon = $UI.Presets;  Name = "Preset Profiles"; Desc = "1-Click Curated Optimization & Safety Profiles" },
+    @{ Id = "Maint";     Icon = $UI.Maint;    Name = "Maintenance";     Desc = "DISM, SFC, WinSxS reduction, Component Repair & Update Fixes" },
+    @{ Id = "Perf";      Icon = $UI.Perf;     Name = "Performance";     Desc = "Power plans, Thread priority separation, RAM & Latency Tuning" },
+    @{ Id = "Net";       Icon = $UI.Net;      Name = "Network & DNS";   Desc = "DNS benchmarks, Wi-Fi keys, TCP/IP stack & LAN Discovery" },
+    @{ Id = "Privacy";   Icon = $UI.Privacy;  Name = "Privacy & Bloat"; Desc = "Telemetry removal, Bing search, Recall AI & Consumer Debloat" },
+    @{ Id = "Context";   Icon = $UI.Context;  Name = "Shell & Explorer";Desc = "Classic Context Menus, File extensions, Ownership & Pro Tools" },
+    @{ Id = "Hardware";  Icon = $UI.Hardware; Name = "Hardware Audit";  Desc = "SMART Disk health, RAM Module speeds, Battery & GPU Specs" },
+    @{ Id = "Apps";      Icon = $UI.Apps;     Name = "Software Hub";    Desc = "Winget package updater, App export & Essential SysAdmin Tools" },
+    @{ Id = "Admin";     Icon = $UI.Admin;    Name = "Admin Utilities"; Desc = "Master GodMode, Restore checkpoints & Windows Admin Consoles" }
 )
-
-$ViewContainer = New-Object System.Windows.Forms.Panel -Property @{
-    Dock      = "Fill"
-    BackColor = $script:Theme.Bg
-}
-$MainArea.Controls.Add($ViewContainer)
-$ViewContainer.BringToFront()
 
 function Select-Tab($TargetId) {
     $script:CurrentTabId = $TargetId
@@ -627,30 +669,53 @@ function Select-Tab($TargetId) {
         $active.Icon.ForeColor = $script:Theme.AccentGlow
         $active.Text.ForeColor = [System.Drawing.Color]::White
     }
+    Update-ResponsiveLayout
 }
 
-$BtnY = 10
+$BtnY = 8
 foreach ($tab in $TabList) {
     $Flow = New-Object System.Windows.Forms.FlowLayoutPanel -Property @{
         Dock          = "Fill"
         AutoScroll    = $true
         BackColor     = $script:Theme.Bg
-        Padding       = New-Object System.Windows.Forms.Padding(18, 14, 18, 18)
+        Padding       = New-Object System.Windows.Forms.Padding(16, 10, 16, 16)
         Visible       = $false
     }
     $ViewContainer.Controls.Add($Flow)
     $script:CategoryPanels[$tab.Id] = $Flow
 
-    # Sidebar Item Container Panel
+    # Category Section Banner Header
+    $Banner = New-Object System.Windows.Forms.Panel -Property @{
+        Width        = 900
+        Height       = 38
+        Margin       = New-Object System.Windows.Forms.Padding(4, 4, 4, 8)
+        BackColor    = [System.Drawing.Color]::Transparent
+    }
+    $BannerTitle = New-Object System.Windows.Forms.Label -Property @{
+        Text        = "$($tab.Icon)  $($tab.Name.ToUpper())"
+        Location    = New-Object System.Drawing.Point(4, 0); AutoSize = $true
+        ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 10.5, [System.Drawing.FontStyle]::Bold)
+        UseMnemonic = $false
+    }
+    $BannerDesc = New-Object System.Windows.Forms.Label -Property @{
+        Text        = "— $($tab.Desc)"
+        Location    = New-Object System.Drawing.Point($BannerTitle.PreferredWidth + 12, 3); AutoSize = $true
+        ForeColor   = $script:Theme.TextSubtle; Font = New-Object System.Drawing.Font($GlobalFont, 8)
+        UseMnemonic = $false
+    }
+    $Banner.Controls.AddRange(@($BannerTitle, $BannerDesc))
+    $Flow.Controls.Add($Banner)
+
+    # Sidebar Item Panel
     $ItemPanel = New-Object System.Windows.Forms.Panel -Property @{
         Location  = New-Object System.Drawing.Point(0, $BtnY)
-        Size      = New-Object System.Drawing.Size(235, 42)
+        Size      = New-Object System.Drawing.Size(235, 40)
         BackColor = $script:Theme.Sidebar
         Cursor    = [System.Windows.Forms.Cursors]::Hand
         Tag       = $tab.Id
     }
 
-    # Left Active Indicator Bar
+    # Left Active Indicator
     $Indicator = New-Object System.Windows.Forms.Panel -Property @{
         Dock      = "Left"
         Width     = 4
@@ -660,8 +725,8 @@ foreach ($tab in $TabList) {
     # Vector Icon Label
     $IconLbl = New-Object System.Windows.Forms.Label -Property @{
         Text        = $tab.Icon
-        Location    = New-Object System.Drawing.Point(14, 11); Size = New-Object System.Drawing.Size(24, 20)
-        ForeColor   = $script:Theme.TextMuted; Font = New-Object System.Drawing.Font($IconFont, 10.5)
+        Location    = New-Object System.Drawing.Point(14, 10); Size = New-Object System.Drawing.Size(22, 20)
+        ForeColor   = $script:Theme.TextMuted; Font = New-Object System.Drawing.Font($IconFont, 10)
         BackColor   = [System.Drawing.Color]::Transparent
         UseMnemonic = $false
     }
@@ -669,8 +734,8 @@ foreach ($tab in $TabList) {
     # Tab Text Label
     $TextLbl = New-Object System.Windows.Forms.Label -Property @{
         Text        = $tab.Name
-        Location    = New-Object System.Drawing.Point(44, 11); Size = New-Object System.Drawing.Size(180, 20)
-        ForeColor   = $script:Theme.TextMuted; Font = New-Object System.Drawing.Font($GlobalFont, 9, [System.Drawing.FontStyle]::Bold)
+        Location    = New-Object System.Drawing.Point(42, 10); Size = New-Object System.Drawing.Size(182, 20)
+        ForeColor   = $script:Theme.TextMuted; Font = New-Object System.Drawing.Font($GlobalFont, 8.5, [System.Drawing.FontStyle]::Bold)
         BackColor   = [System.Drawing.Color]::Transparent
         UseMnemonic = $false
     }
@@ -684,14 +749,10 @@ foreach ($tab in $TabList) {
     $TextLbl.Add_Click({ Select-Tab $this.Parent.Tag })
 
     $enterHandler = {
-        if ($script:CurrentTabId -ne $this.Tag) {
-            $this.BackColor = $script:Theme.SidebarHover
-        }
+        if ($script:CurrentTabId -ne $this.Tag) { $this.BackColor = $script:Theme.SidebarHover }
     }
     $leaveHandler = {
-        if ($script:CurrentTabId -ne $this.Tag) {
-            $this.BackColor = $script:Theme.Sidebar
-        }
+        if ($script:CurrentTabId -ne $this.Tag) { $this.BackColor = $script:Theme.Sidebar }
     }
     $ItemPanel.Add_MouseEnter($enterHandler)
     $ItemPanel.Add_MouseLeave($leaveHandler)
@@ -703,10 +764,10 @@ foreach ($tab in $TabList) {
         Icon      = $IconLbl
         Text      = $TextLbl
     }
-    $BtnY += 46
+    $BtnY += 44
 }
 
-# --- [Dynamic Cross-Category Search Engine] ---
+# --- [Dynamic Search Filter Engine] ---
 $SearchBox.Add_TextChanged({
     $Query = $SearchBox.Text.Trim().ToLower()
     $isSearching = ($Query -ne $SearchPlaceholder.ToLower() -and -not [string]::IsNullOrWhiteSpace($Query))
@@ -716,6 +777,7 @@ $SearchBox.Add_TextChanged({
         foreach ($k in $script:CategoryPanels.Keys) { 
             $script:CategoryPanels[$k].Visible = ($k -eq $script:CurrentTabId) 
         }
+        Update-ResponsiveLayout
         return
     }
 
@@ -726,9 +788,10 @@ $SearchBox.Add_TextChanged({
         $card.Panel.Visible = $Match
     }
     foreach ($k in $script:CategoryPanels.Keys) {
-        $hasVisible = ($script:CategoryPanels[$k].Controls | Where-Object { $_.Visible }).Count -gt 0
+        $hasVisible = ($script:CategoryPanels[$k].Controls | Where-Object { $_ -is [System.Windows.Forms.Panel] -and $_.Visible -and $_.Tag -ne "Banner" }).Count -gt 0
         $script:CategoryPanels[$k].Visible = $hasVisible
     }
+    Update-ResponsiveLayout
 })
 
 # ==============================================================================
@@ -1226,7 +1289,7 @@ New-TweakCard $P_Admin $UI.Shield "Defender Quick Scan" "Antivirus" "Updates thr
     Write-Log "Microsoft Defender Quick Scan complete." "Success"
 }
 
-# --- [Default Selection & Telemetry Loop] ---
+# --- [Default Tab Activation] ---
 Select-Tab "Presets"
 
 # Global Keyboard Shortcuts
@@ -1244,7 +1307,7 @@ $Form.Add_KeyDown({
 })
 
 # Telemetry Timer (Runs Every 2 Seconds)
-$TelemetryTimer = New-Object System.Windows.Forms.Timer -Property @{Interval=2000; Enabled=$true}
+$TelemetryTimer = New-Object System.Windows.Forms.Timer -Property @{Interval = 2000; Enabled = $true}
 $TelemetryTimer.Add_Tick({
     try {
         if ($script:CpuCounter) {
@@ -1277,5 +1340,5 @@ $Form.Add_FormClosing({
     if ($script:CpuCounter) { $script:CpuCounter.Dispose() }
 })
 
-Write-Log "AdminWorks Pro Suite v4.3 loaded and ready." "Success"
+Write-Log "AdminWorks Pro Suite v4.4 loaded and ready." "Success"
 [void]$Form.ShowDialog()
