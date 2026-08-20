@@ -1,7 +1,7 @@
 <#
 ================================================================================
-  ADMINWORKS PRO v4.5 - Enterprise Windows Administration & Optimization Suite
-  Compatible with Windows 10 & Windows 11 (Responsive Multi-Resolution Edition)
+  ADMINWORKS PRO v4.6 - Enterprise Windows Administration & Optimization Suite
+  Compatible with Windows 10 & Windows 11
 ================================================================================
 #>
 
@@ -74,7 +74,7 @@ if ($CheckIcon.Name -ne $IconFont) {
     if ($CheckIcon2.Name -ne $IconFont) { $IconFont = "Segoe UI Symbol" }
 }
 
-# --- [Native Windows Icon Glyphs] ---
+# --- [Native Windows Icon Glyphs (Segoe MDL2 Assets / Fluent Icons)] ---
 $UI = @{
     Bullet     = [char]0x2022
     Dot        = [char]0x25CF
@@ -87,22 +87,22 @@ $UI = @{
     Search     = [char]0xE721
     
     # Sidebar Navigation Icons
-    Presets    = [char]0xE735  # Favorite / Star
-    Maint      = [char]0xE90F  # Wrench / Repair
-    Perf       = [char]0xEC11  # Power / Energy
+    Presets    = [char]0xE735  # Star / Presets
+    Maint      = [char]0xE90F  # Wrench / Maintenance
+    Perf       = [char]0xEC11  # Bolt / Performance
     Net        = [char]0xE774  # Globe / Network
     Privacy    = [char]0xE72E  # Lock / Privacy
-    Context    = [char]0xE8B7  # Folder / Shell
-    Hardware   = [char]0xE7F8  # Devices / Laptop
-    Apps       = [char]0xEB49  # Package / Store
-    Admin      = [char]0xE7EE  # Diagnostic / Tools
+    Context    = [char]0xE8B7  # Folder / Explorer
+    Hardware   = [char]0xE7F8  # Devices / Hardware
+    Apps       = [char]0xEB49  # Package / Apps
+    Admin      = [char]0xE7EE  # Diagnostic / Admin
     
     # Card & Widget Glyphs
-    Sparkle    = [char]0xE7FC  # Controller / Gaming
+    Sparkle    = [char]0xE7FC  # Gaming / Sparkle
     Shield     = [char]0xEA18  # Shield / Security
     Building   = [char]0xE770  # Workstation / Office
     Refresh    = [char]0xE72C  # Refresh / Sync
-    Undo       = [char]0xE7A7  # Undo / History
+    Undo       = [char]0xE7A7  # Undo / Restore
     Cpu        = [char]0xE950  # Processor
     Ram        = [char]0xE7B8  # Memory
     Disk       = [char]0xEDA2  # Hard Drive
@@ -153,7 +153,7 @@ $Header = New-Object System.Windows.Forms.Panel -Property @{
 }
 $Form.Controls.Add($Header)
 
-# Left: Brand Container (Aligned with Sidebar)
+# Left: Brand Container
 $BrandPanel = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Left"
     Width     = 235
@@ -170,7 +170,7 @@ $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
     ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 12, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false
 }
 $TitleSub = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "ENTERPRISE SUITE v4.5  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(46, 36); AutoSize = $true
+    Text        = "ENTERPRISE SUITE v4.6  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(46, 36); AutoSize = $true
     ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
     Cursor      = [System.Windows.Forms.Cursors]::Hand; UseMnemonic = $false
 }
@@ -671,7 +671,7 @@ function Select-Tab($TargetId) {
     Update-ResponsiveLayout
 }
 
-$BtnY = 8
+[int]$BtnY = 8
 foreach ($tab in $TabList) {
     $Flow = New-Object System.Windows.Forms.FlowLayoutPanel -Property @{
         Dock          = "Fill"
@@ -683,34 +683,34 @@ foreach ($tab in $TabList) {
     $ViewContainer.Controls.Add($Flow)
     $script:CategoryPanels[$tab.Id] = $Flow
 
-    # Category Section Banner Header (Using FlowLayoutPanel for automatic horizontal alignment)
+    # Category Section Banner Header
     $Banner = New-Object System.Windows.Forms.FlowLayoutPanel -Property @{
-    Height        = 32
-    Width         = 1200
-    FlowDirection = "LeftToRight"
-    WrapContents  = $false
-    BackColor     = [System.Drawing.Color]::Transparent
-    Margin        = New-Object System.Windows.Forms.Padding(4, 2, 4, 8)
-    Tag           = "Banner"
-}
-$BannerTitle = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "$($tab.Icon)  $($tab.Name.ToUpper())"
-    AutoSize    = $true
-    ForeColor   = $script:Theme.TextMain
-    Font        = New-Object System.Drawing.Font($GlobalFont, 10.5, [System.Drawing.FontStyle]::Bold)
-    Margin      = New-Object System.Windows.Forms.Padding(0, 0, 8, 0)
-    UseMnemonic = $false
-}
-$BannerDesc = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "— $($tab.Desc)"
-    AutoSize    = $true
-    ForeColor   = $script:Theme.TextSubtle
-    Font        = New-Object System.Drawing.Font($GlobalFont, 8.5)
-    Margin      = New-Object System.Windows.Forms.Padding(0, 2, 0, 0)
-    UseMnemonic = $false
-}
-$Banner.Controls.AddRange(@($BannerTitle, $BannerDesc))
-$Flow.Controls.Add($Banner)
+        Height        = 32
+        Width         = 1200
+        FlowDirection = "LeftToRight"
+        WrapContents  = $false
+        BackColor     = [System.Drawing.Color]::Transparent
+        Margin        = New-Object System.Windows.Forms.Padding(4, 2, 4, 8)
+        Tag           = "Banner"
+    }
+    $BannerTitle = New-Object System.Windows.Forms.Label -Property @{
+        Text        = "$($tab.Icon)  $($tab.Name.ToUpper())"
+        AutoSize    = $true
+        ForeColor   = $script:Theme.TextMain
+        Font        = New-Object System.Drawing.Font($GlobalFont, 10.5, [System.Drawing.FontStyle]::Bold)
+        Margin      = New-Object System.Windows.Forms.Padding(0, 0, 8, 0)
+        UseMnemonic = $false
+    }
+    $BannerDesc = New-Object System.Windows.Forms.Label -Property @{
+        Text        = "— $($tab.Desc)"
+        AutoSize    = $true
+        ForeColor   = $script:Theme.TextSubtle
+        Font        = New-Object System.Drawing.Font($GlobalFont, 8.5)
+        Margin      = New-Object System.Windows.Forms.Padding(0, 2, 0, 0)
+        UseMnemonic = $false
+    }
+    $Banner.Controls.AddRange(@($BannerTitle, $BannerDesc))
+    $Flow.Controls.Add($Banner)
 
     # Sidebar Item Panel
     $ItemPanel = New-Object System.Windows.Forms.Panel -Property @{
@@ -770,7 +770,7 @@ $Flow.Controls.Add($Banner)
         Icon      = $IconLbl
         Text      = $TextLbl
     }
-    $BtnY += 44
+    $BtnY = [int]($BtnY + 44)
 }
 
 # --- [Dynamic Search Filter Engine] ---
@@ -1059,14 +1059,14 @@ New-TweakCard $P_Privacy $UI.Apps "Universal OEM Debloat" "App Purge" "Removes c
         "*McAfee*", "*Norton*", "*Dropbox*", "*Evernote*", "*Clipchamp*", "*BingNews*",
         "*BingFinance*", "*BingSports*"
     )
-    $count = 0
+    [int]$count = 0
     foreach ($app in $Apps) {
         $installed = Get-AppxPackage -Name $app -AllUsers -ErrorAction SilentlyContinue
         if ($installed) {
             $installed | Remove-AppxPackage -AllUsers -ErrorAction SilentlyContinue
             Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like $app } | Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
             Write-Log "Removed: $app" "Success"
-            $count++
+            $count = [int]($count + 1)
         }
     }
     Write-Log "$count bloatware packages purged." "Success"
@@ -1328,9 +1328,9 @@ $TelemetryTimer.Add_Tick({
         $StatRAM.Text = "$usedMemGB / $totMemGB GB"
 
         $c = Get-PSDrive C -ErrorAction SilentlyContinue
-        if ($c) {
-            $freeGB = [math]::Round($c.Free / 1GB, 1)
-            $totGB = [math]::Round(($c.Used + $c.Free) / 1GB, 1)
+        if ($c -and $c.Used -ne $null -and $c.Free -ne $null) {
+            $freeGB = [math]::Round([double]$c.Free / 1GB, 1)
+            $totGB  = [math]::Round(([double]$c.Used + [double]$c.Free) / 1GB, 1)
             $StatDisk.Text = "$freeGB GB Free ($totGB GB)"
         }
 
@@ -1346,5 +1346,5 @@ $Form.Add_FormClosing({
     if ($script:CpuCounter) { $script:CpuCounter.Dispose() }
 })
 
-Write-Log "AdminWorks Pro Suite v4.5 loaded and ready." "Success"
+Write-Log "AdminWorks Pro Suite v4.6 loaded and ready." "Success"
 [void]$Form.ShowDialog()
