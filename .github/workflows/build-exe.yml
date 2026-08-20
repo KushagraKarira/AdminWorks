@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    name: Build and Release Executables
+    name: Build and Release Executable
     runs-on: windows-latest
 
     steps:
@@ -25,30 +25,21 @@ jobs:
       - name: Compile AdminWorks.ps1
         shell: powershell
         run: |
-          Invoke-ps2exe -inputFile ".\AdminWorks.ps1" -outputFile ".\AdminWorks.exe" -iconFile ".\app.ico" -requireAdmin -noConsole -title "AdminWorks" -company "Kushagra Karira" -version "1.0.0.0"
+          Invoke-ps2exe -inputFile ".\AdminWorks.ps1" -outputFile ".\AdminWorks.exe" -iconFile ".\app.ico" -requireAdmin -noConsole -title "AdminWorks" -company "Kushagra Karira" -version "4.1.0.0"
 
-      - name: Compile AdminWorksPro.ps1
-        shell: powershell
-        run: |
-          Invoke-ps2exe -inputFile ".\AdminWorksPro.ps1" -outputFile ".\AdminWorksPro.exe" -iconFile ".\app.ico" -requireAdmin -noConsole -title "AdminWorks Pro" -company "Kushagra Karira" -version "4.1.0.0"
-
-      - name: Upload EXE Artifacts
+      - name: Upload EXE Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AdminWorks-Executables
-          path: |
-            .\AdminWorks.exe
-            .\AdminWorksPro.exe
+          name: AdminWorks-Executable
+          path: .\AdminWorks.exe
           retention-days: 7
 
-      - name: Auto Release EXEs
+      - name: Auto Release EXE
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: AdminWorks Build ${{ github.run_number }}
-          body: "Automated build of AdminWorks and AdminWorks Pro executables."
-          files: |
-            .\AdminWorks.exe
-            .\AdminWorksPro.exe
+          body: "Automated build of the AdminWorks executable."
+          files: .\AdminWorks.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
