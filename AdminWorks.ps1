@@ -47,7 +47,7 @@ $script:Theme = @{
     Sidebar       = [System.Drawing.Color]::FromArgb(21, 26, 36)       # Sidebar Panel
     SidebarActive = [System.Drawing.Color]::FromArgb(35, 43, 60)       # Active Tab
     Card          = [System.Drawing.Color]::FromArgb(26, 32, 44)       # Card Surface
-    CardHover     = [System.Drawing.Color]::FromArgb(38, 46, 64)       # Card Hover
+    CardHover     = [System.Drawing.Color]::FromArgb(34, 42, 58)       # Card Hover
     CardBorder    = [System.Drawing.Color]::FromArgb(44, 53, 74)       # Subtle Border
     Accent        = [System.Drawing.Color]::FromArgb(59, 130, 246)     # Electric Blue
     AccentGlow    = [System.Drawing.Color]::FromArgb(96, 165, 250)     # Sky Blue
@@ -69,7 +69,7 @@ $script:BackupDir = "$env:LOCALAPPDATA\AdminWorks\Backups"
 if (-not (Test-Path $script:BackupDir)) { New-Item -ItemType Directory -Path $script:BackupDir -Force | Out-Null }
 
 # --- [Dynamic Screen Resolution Adaptation] ---
-$ScreenBounds = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+$ScreenBounds  = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
 $InitialWidth  = [math]::Min(1320, [int]($ScreenBounds.Width * 0.92))
 $InitialHeight = [math]::Min(920, [int]($ScreenBounds.Height * 0.90))
 
@@ -81,6 +81,7 @@ $Form.BackColor       = $script:Theme.Bg
 $Form.StartPosition   = "CenterScreen"
 $Form.FormBorderStyle = "None"
 $Form.MinimumSize     = New-Object System.Drawing.Size(960, 680)
+$Form.KeyPreview      = $true
 
 try {
     $bf = [System.Reflection.BindingFlags]::Instance -bor [System.Reflection.BindingFlags]::NonPublic
@@ -88,7 +89,7 @@ try {
     if ($prop) { $prop.SetValue($Form, $true, $null) }
 } catch {}
 
-# Apply Dark Mode Frame Attribute (Windows 11 / Windows 10)
+# Apply Dark Mode Frame Attribute
 try {
     $darkValue = 1
     $res = [NativeMethods]::DwmSetWindowAttribute($Form.Handle, 20, [ref]$darkValue, 4)
@@ -147,7 +148,7 @@ $SysBadge = New-Object System.Windows.Forms.Label -Property @{
 }
 $Header.Controls.Add($SysBadge)
 
-# Search Input Container (Auto-anchors smoothly)
+# Search Input Container
 $SearchPanel = New-Object System.Windows.Forms.Panel -Property @{
     Location  = New-Object System.Drawing.Point(($Header.Width - 480), 18); Size = New-Object System.Drawing.Size(320, 34)
     BackColor = $script:Theme.Sidebar; Anchor = [System.Windows.Forms.AnchorStyles]"Top, Right"
@@ -162,7 +163,7 @@ $SearchBox.Add_LostFocus({ if ([string]::IsNullOrWhiteSpace($this.Text)) { $this
 $SearchPanel.Controls.Add($SearchBox)
 $Header.Controls.Add($SearchPanel)
 
-# Window Controls (Minimize, Maximize, Close)
+# Window Controls (Minimize, Maximize/Restore, Close)
 $CtrlBox = New-Object System.Windows.Forms.Panel -Property @{Dock="Right"; Width=140}
 $Header.Controls.Add($CtrlBox)
 
@@ -171,16 +172,26 @@ function New-WindowBtn($Text, $X, $HoverColor, $Action) {
         Text = $Text; Size = New-Object System.Drawing.Size(42, 34); 
         Location = New-Object System.Drawing.Point($X, 18); FlatStyle = "Flat"; 
         ForeColor = $script:Theme.TextMuted; Tag = $HoverColor
+        Font = New-Object System.Drawing.Font($GlobalFont, 9, [System.Drawing.FontStyle]::Bold)
     }
     $B.FlatAppearance.BorderSize = 0
     $B.Add_Click($Action)
     $B.Add_MouseEnter({ $this.BackColor = $this.Tag; $this.ForeColor = [System.Drawing.Color]::White })
     $B.Add_MouseLeave({ $this.BackColor = [System.Drawing.Color]::Transparent; $this.ForeColor = $script:Theme.TextMuted })
     $CtrlBox.Controls.Add($B)
+    return $B
 }
-New-WindowBtn "✕" 90 $script:Theme.Danger { $Form.Close() }
-New-WindowBtn "⬜" 46 $script:Theme.CardHover { if ($Form.WindowState -eq "Maximized") { $Form.WindowState = "Normal" } else { $Form.WindowState = "Maximized" } }
-New-WindowBtn "—" 2 $script:Theme.CardHover { $Form.WindowState = "Minimized" }
+$BtnClose = New-WindowBtn "✕" 90 $script:Theme.Danger { $Form.Close() }
+$BtnMax   = New-WindowBtn "⬜" 46 $script:Theme.CardHover { 
+    if ($Form.WindowState -eq "Maximized") { 
+        $Form.WindowState = "Normal"
+        $this.Text = "⬜"
+    } else { 
+        $Form.WindowState = "Maximized"
+        $this.Text = "❐"
+    } 
+}
+$BtnMin   = New-WindowBtn "—" 2 $script:Theme.CardHover { $Form.WindowState = "Minimized" }
 
 # --- [Sidebar Navigation Container] ---
 $Sidebar = New-Object System.Windows.Forms.Panel -Property @{
@@ -209,7 +220,7 @@ $TermTitle = New-Object System.Windows.Forms.Label -Property @{
 }
 $TermHeader.Controls.Add($TermTitle)
 
-# Responsive Terminal Action Buttons Container
+# Responsive Console Buttons Container
 $TermBtnContainer = New-Object System.Windows.Forms.FlowLayoutPanel -Property @{
     Dock          = "Right"
     Width         = 430
@@ -233,6 +244,7 @@ function New-TermBtn($Text, $Action) {
         FlatStyle = "Flat"; BackColor = $script:Theme.Card; ForeColor = $script:Theme.TextMuted
         Font = New-Object System.Drawing.Font($GlobalFont, 7.5, [System.Drawing.FontStyle]::Bold)
         Margin = New-Object System.Windows.Forms.Padding(4, 2, 4, 2)
+        Cursor = [System.Windows.Forms.Cursors]::Hand
     }
     $Btn.FlatAppearance.BorderSize = 0
     $Btn.Add_MouseEnter({ $this.BackColor = $script:Theme.CardHover; $this.ForeColor = $script:Theme.TextMain })
@@ -247,6 +259,7 @@ $BtnToggleDrawer = New-Object System.Windows.Forms.Button -Property @{
     FlatStyle = "Flat"; BackColor = $script:Theme.Card; ForeColor = $script:Theme.AccentGlow
     Font = New-Object System.Drawing.Font($GlobalFont, 7.5, [System.Drawing.FontStyle]::Bold)
     Margin = New-Object System.Windows.Forms.Padding(4, 2, 4, 2)
+    Cursor = [System.Windows.Forms.Cursors]::Hand
 }
 $BtnToggleDrawer.FlatAppearance.BorderSize = 0
 $BtnToggleDrawer.Add_Click({
@@ -302,6 +315,7 @@ $TelemetryBar = New-Object System.Windows.Forms.TableLayoutPanel -Property @{
     RowCount    = 1
     Padding     = New-Object System.Windows.Forms.Padding(12, 6, 12, 6)
 }
+# Suppress return indices (fixes 0, 1, 2, 3 popup emission)
 [void]$TelemetryBar.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 25)))
 [void]$TelemetryBar.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 25)))
 [void]$TelemetryBar.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 25)))
@@ -332,7 +346,7 @@ $StatRAM  = New-StatWidget "MEMORY USED"
 $StatDisk = New-StatWidget "SYSTEM DRIVE (C:)"
 $StatUp   = New-StatWidget "SYSTEM UPTIME"
 
-# High-Performance CPU Counter (Eliminates GUI Stutters)
+# High-Performance CPU Counter (Eliminates GUI Lag)
 $script:CpuCounter = $null
 try {
     $script:CpuCounter = New-Object System.Diagnostics.PerformanceCounter("Processor", "% Processor Time", "_Total")
@@ -363,7 +377,7 @@ function New-TweakCard ($CategoryPanel, $Title, $CategoryTag, $Desc, $Action) {
         Text      = $Title
         Location  = New-Object System.Drawing.Point(12, 28); Size = New-Object System.Drawing.Size(200, 24)
         ForeColor = $script:Theme.TextMain
-        Font      = New-Object System.Drawing.Font($GlobalFont, 10, [System.Drawing.FontStyle]::Bold)
+        Font      = New-Object System.Drawing.Font($GlobalFont, 9.5, [System.Drawing.FontStyle]::Bold)
     }
 
     $DescLbl = New-Object System.Windows.Forms.Label -Property @{
@@ -372,6 +386,10 @@ function New-TweakCard ($CategoryPanel, $Title, $CategoryTag, $Desc, $Action) {
         ForeColor = $script:Theme.TextMuted
         Font      = New-Object System.Drawing.Font($GlobalFont, 8)
     }
+
+    # Smooth Card Hover Effect
+    $P.Add_MouseEnter({ $this.BackColor = $script:Theme.CardHover })
+    $P.Add_MouseLeave({ $this.BackColor = $script:Theme.Card })
 
     $ActionString = $Action.ToString()
 
@@ -384,6 +402,7 @@ function New-TweakCard ($CategoryPanel, $Title, $CategoryTag, $Desc, $Action) {
         ForeColor = $script:Theme.TextMain
         Font      = New-Object System.Drawing.Font($GlobalFont, 8, [System.Drawing.FontStyle]::Bold)
         Tag       = $ActionString
+        Cursor    = [System.Windows.Forms.Cursors]::Hand
     }
     $Btn.FlatAppearance.BorderSize = 0
     $Btn.Add_MouseEnter({ if ($this.Enabled) { $this.BackColor = $script:Theme.Accent; $this.ForeColor = [System.Drawing.Color]::White } })
@@ -468,17 +487,17 @@ function New-TweakCard ($CategoryPanel, $Title, $CategoryTag, $Desc, $Action) {
     })
 }
 
-# --- [Sidebar Tabs Definition] ---
+# --- [Sidebar Tabs Definition with Tested Universal Glyphs] ---
 $TabList = @(
     @{ Id = "Presets";   Name = "★  Preset Profiles"; Desc = "1-Click Optimization Profiles" },
     @{ Id = "Maint";     Name = "⚙  Maintenance";     Desc = "DISM, SFC, Component cleanup, Update fixes" },
     @{ Id = "Perf";      Name = "⚡  Performance";     Desc = "Power plans, CPU priority, latency & RAM" },
-    @{ Id = "Net";       Name = "☁  Network & DNS";   Desc = "DNS benchmarks, Wi-Fi keys, TCP stack & ports" },
+    @{ Id = "Net";       Name = "🌐  Network & DNS";   Desc = "DNS benchmarks, Wi-Fi keys, TCP stack & ports" },
     @{ Id = "Privacy";   Name = "🔒  Privacy & Bloat"; Desc = "Telemetry removal, Bing, Copilot & Debloat" },
-    @{ Id = "Context";   Name = "▤  Shell & Explorer";Desc = "Context menus, file extensions & UI tweaks" },
-    @{ Id = "Hardware";  Name = "⛁  Hardware Audit";  Desc = "SMART drives, RAM banks, battery & GPU stats" },
-    @{ Id = "Apps";      Name = "❖  Software Hub";    Desc = "Winget package updater & curated installer" },
-    @{ Id = "Admin";     Name = "⚒  Admin Utilities"; Desc = "GodMode, Windows tools hub & System Restore" }
+    @{ Id = "Context";   Name = "📁  Shell & Explorer";Desc = "Context menus, file extensions & UI tweaks" },
+    @{ Id = "Hardware";  Name = "💻  Hardware Audit";  Desc = "SMART drives, RAM banks, battery & GPU stats" },
+    @{ Id = "Apps";      Name = "📦  Software Hub";    Desc = "Winget package updater & curated installer" },
+    @{ Id = "Admin";     Name = "🛠  Admin Utilities"; Desc = "GodMode, Windows tools hub & System Restore" }
 )
 
 $ViewContainer = New-Object System.Windows.Forms.Panel -Property @{
@@ -510,6 +529,7 @@ foreach ($tab in $TabList) {
         Font      = New-Object System.Drawing.Font($GlobalFont, 8.5, [System.Drawing.FontStyle]::Bold)
         TextAlign = "MiddleLeft"
         Tag       = $tab.Id
+        Cursor    = [System.Windows.Forms.Cursors]::Hand
     }
     $NavBtn.FlatAppearance.BorderSize = 0
     $NavBtn.Add_Click({
@@ -564,7 +584,7 @@ $SearchBox.Add_TextChanged({
 # ------------------------------------------------------------------------------
 $P_Presets = $script:CategoryPanels["Presets"]
 
-New-TweakCard $P_Presets "🎮 Gamer Mode Preset" "Preset Profile" "Applies Ultimate Power Plan, disables GameDVR, prioritizes foreground threads & frees RAM." {
+New-TweakCard $P_Presets "✦ Gamer Mode Profile" "Preset Profile" "Applies Ultimate Power Plan, disables GameDVR, prioritizes foreground threads & frees RAM." {
     Write-Log "Applying GAMER MODE PRESET..." "Warning"
     powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 | Out-Null
     Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value 0
@@ -575,7 +595,7 @@ New-TweakCard $P_Presets "🎮 Gamer Mode Preset" "Preset Profile" "Applies Ulti
     Write-Log "Gamer Mode Profile successfully configured and active." "Success"
 }
 
-New-TweakCard $P_Presets "🛡️ Privacy Lockdown" "Preset Profile" "Disables telemetry, DiagTrack, Recall AI, Bing Start Search, Ad ID & Edge Background." {
+New-TweakCard $P_Presets "🛡 Privacy Lockdown" "Preset Profile" "Disables telemetry, DiagTrack, Recall AI, Bing Start Search, Ad ID & Edge Background." {
     Write-Log "Applying PRIVACY LOCKDOWN PRESET..." "Warning"
     Stop-Service "DiagTrack", "dmwappushservice" -ErrorAction SilentlyContinue
     Set-Service "DiagTrack", "dmwappushservice" -StartupType Disabled -ErrorAction SilentlyContinue
@@ -617,7 +637,7 @@ New-TweakCard $P_Presets "🔄 Express Maintenance" "Preset Profile" "Runs SSD R
     Write-Log "Express Maintenance completed." "Success"
 }
 
-New-TweakCard $P_Presets "⏪ Rollback Last Backup" "Safety" "Restores the most recent registry backup saved in the AdminWorks backup directory." {
+New-TweakCard $P_Presets "↺ Rollback Last Backup" "Safety" "Restores the most recent registry backup saved in the AdminWorks backup directory." {
     Write-Log "Checking for available registry backups..." "Exec"
     $latest = Get-ChildItem "$BackupDir\*.reg" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if ($latest) {
@@ -1053,6 +1073,20 @@ New-TweakCard $P_Admin "Defender Quick Scan" "Antivirus" "Updates threat intelli
 # --- [Default Selection & Lag-Free Telemetry Loop] ---
 $script:SidebarButtons["Presets"].PerformClick()
 
+# Global Keyboard Shortcuts
+$Form.Add_KeyDown({
+    if ($_.Control -and $_.KeyCode -eq [System.Windows.Forms.Keys]::F) {
+        $SearchBox.Focus()
+        $SearchBox.SelectAll()
+        $_.SuppressKeyPress = $true
+    }
+    elseif ($_.Control -and $_.KeyCode -eq [System.Windows.Forms.Keys]::L) {
+        $LogBox.Clear()
+        Write-Log "Console cleared via shortcut." "Info"
+        $_.SuppressKeyPress = $true
+    }
+})
+
 # Telemetry Timer (Runs Every 2 Seconds without UI Freezing)
 $TelemetryTimer = New-Object System.Windows.Forms.Timer -Property @{Interval=2000; Enabled=$true}
 $TelemetryTimer.Add_Tick({
@@ -1082,6 +1116,13 @@ $TelemetryTimer.Add_Tick({
         $span = (Get-Date) - $os.LastBootUpTime
         $StatUp.Text = "$($span.Days)d $($span.Hours)h $($span.Minutes)m"
     } catch {}
+})
+
+# Form Closing Clean-up
+$Form.Add_FormClosing({
+    $TelemetryTimer.Stop()
+    $TelemetryTimer.Dispose()
+    if ($script:CpuCounter) { $script:CpuCounter.Dispose() }
 })
 
 Write-Log "AdminWorks Pro Suite v4.2 loaded and ready." "Success"
