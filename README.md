@@ -1,36 +1,59 @@
-# **UNFUCK: Your Digital Deep-Clean & Optimization Tool**
+# ⚡ AdminWorks & AdminWorks Pro
 
-**UNFUCK** is a one-click dashboard designed to fix, clean, and speed up a Windows computer. It takes complex technical tasks that usually require hours of manual work and turns them into simple buttons.
+**Enterprise Windows Administration & Optimization Suite**
 
-
-
----
-
-### **1. Maintenance: Fixing the Foundation**
-* **Deep Repair:** Like a digital mechanic, this checks every part of the Windows system for "cracks" or broken files and repairs them automatically.
-* **Full Updates:** Instead of updating every app one by one, this button checks all your software and the Windows OS itself, ensuring everything is current and secure.
-* **Junk Purge:** Deletes hidden temporary files that clog up your storage, often freeing up several gigabytes of space instantly.
-
-### **2. Performance: Unlocking Speed**
-* **Latency Fix:** Removes the tiny "wait times" built into the Windows interface, making menus pop up instantly and improving response times in games or heavy software.
-* **Ultimate Power:** Switches the computer into a "high-performance" mode that prevents the processor from slowing down to save power, giving you maximum speed at all times.
-* **Time Sync:** Connects your computer to an atomic clock to make sure your system time is perfectly accurate, which is vital for secure logins and internet stability.
-
-### **3. Privacy: Taking Back Control**
-* **Kill AI & Recall:** Permanently deletes "Recall" and other AI-tracking features that record your screen or monitor your habits.
-* **DNS Hardening:** Re-routes your internet through a private, faster path (Cloudflare) so your Service Provider can't track your browsing as easily.
-* **Clean Factory Bloat:** Uninstalls pre-packaged "junkware" (like pre-installed games and trial apps) that slow down your computer from the day you buy it.
-
-### **4. Stability: Smooth Networking**
-* **SMB Stability:** A specialized fix for people who work with shared files or databases over a local network. It prevents file corruption and keeps connections steady.
-
-### **5. Activation: Easy Licensing**
-* **One-Click Activation:** Uses a trusted, community-standard script (MAS) to activate Windows and Office instantly without needing to search for keys or external files.
+AdminWorks is a powerful, GUI-driven PowerShell suite designed for IT professionals, system administrators, and power users. It provides a centralized dashboard to optimize, maintain, secure, and troubleshoot **Windows 10** and **Windows 11** environments—all without navigating through endless control panels.
 
 ---
 
-### **How to Use It**
-1.  **Run as Administrator:** Right-click the script and select "Run with PowerShell."
-2.  **Choose Your Task:** Click any individual button to fix a specific problem.
-3.  **The Nuclear Option:** Use the **Master Sequence** button to run every optimization at once.
-4.  **Watch the Log:** The black box at the bottom tells you exactly what is happening in real-time.
+## ✨ Key Features
+
+AdminWorks Pro categorizes over 40+ system tweaks and tools into an intuitive interface:
+
+* **🎯 1-Click Presets:** Instantly apply full-system configurations like "Gamer Mode", "Privacy Lockdown", or "Clean Workstation".
+* **⚙️ Maintenance:** Execute deep system repairs (DISM/SFC), shrink the WinSxS component store, and seamlessly reset a broken Windows Update cache.
+* **⚡ Performance:** Unlock the Ultimate Performance power plan, adjust CPU foreground priority, and eliminate hardware/UI latency.
+* **☁️ Network & DNS:** Benchmark and apply Cloudflare/Google DNS, discover LAN devices, and audit saved Wi-Fi passwords.
+* **🔒 Privacy & Bloatware:** Safely disable Windows 11 AI Recall, block Microsoft telemetry via hosts, and universally purge OEM bloatware.
+* **▤ Shell & Explorer:** Restore the classic Windows 10 context menu on Windows 11, add "Take Ownership" shortcuts, and force-reveal hidden file extensions.
+* **⛁ Hardware Audit:** Instantly check SMART disk health, physical RAM slot population, and generate battery degradation reports.
+* **❖ Software Hub:** Batch-update all installed software silently via Winget, and 1-click install essential dev/admin tools (Sysinternals, VSCode, PowerToys).
+* **⚒️ Admin Utilities:** Generate a GodMode desktop shortcut, force Time NTP syncs, and create safety restore points.
+
+---
+
+## 🚀 Installation & Usage
+
+You do not need to install PowerShell modules or use the command line to run this tool. 
+
+1. Navigate to the **[Releases](../../releases)** page.
+2. Download the latest `AdminWorksPro.exe` or `AdminWorks.exe`.
+3. Right-click the file and select **Run as Administrator**.
+   *(Note: The tool will attempt to self-elevate if run normally, but explicit elevation is recommended).*
+
+---
+
+## 🛠️ Building from Source
+
+This project uses **GitHub Actions** and the `ps2exe` module to automatically compile the raw `.ps1` scripts into standalone, GUI-only Windows executables (`-noConsole`).
+
+Whenever a push is made to the `main` branch, the workflow will trigger, compile the scripts, and upload the ready-to-use `.exe` files as Workflow Artifacts. 
+
+To compile manually on your own machine:
+1. Open an elevated PowerShell prompt.
+2. Run `Install-Module -Name ps2exe -Force`
+3. Run `Invoke-ps2exe -inputFile ".\AdminWorksPro.ps1" -outputFile ".\AdminWorksPro.exe" -noConsole`
+
+---
+
+## 💻 System Requirements
+
+* **OS:** Windows 10 (Build 10240+) or Windows 11 (Build 22000+)
+* **Engine:** Windows PowerShell 5.1 (Built-in)
+* **Dependencies:** `winget` (App Installer) is required for the Software Hub tab.
+
+---
+
+## ⚠️ Disclaimer
+
+*AdminWorks modifies the Windows Registry, disables specific scheduled tasks, and alters system services. While automatic registry backups and system restore points are integrated, please ensure you understand the tweaks you are applying. Use at your own risk.*
