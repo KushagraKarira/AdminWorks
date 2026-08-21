@@ -645,6 +645,20 @@ function New-TweakCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc,
 }
 
 # --- [State-Aware Dynamic Toggle Card Engine] ---
+function Update-ToggleStateVisual ($B, $Active) {
+    if (-not $B -or -not $B.Tag) { return }
+    $B.Tag.IsActive = $Active
+    if ($Active) {
+        $B.Text = "ON (ACTIVE)"
+        $B.BackColor = $script:Theme.Success
+        $B.ForeColor = [System.Drawing.Color]::White
+    } else {
+        $B.Text = "OFF (INACTIVE)"
+        $B.BackColor = $script:Theme.SidebarActive
+        $B.ForeColor = $script:Theme.TextMuted
+    }
+}
+
 function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc, $CheckAction, $EnableAction, $DisableAction) {
     $P = New-Object System.Windows.Forms.Panel -Property @{
         Size      = New-Object System.Drawing.Size(320, 146)
@@ -716,19 +730,6 @@ function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc
     }
 
     $Btn.Tag = $ToggleMeta
-
-    function Update-ToggleStateVisual ($B, $Active) {
-        $B.Tag.IsActive = $Active
-        if ($Active) {
-            $B.Text = "ON (ACTIVE)"
-            $B.BackColor = $script:Theme.Success
-            $B.ForeColor = [System.Drawing.Color]::White
-        } else {
-            $B.Text = "OFF (INACTIVE)"
-            $B.BackColor = $script:Theme.SidebarActive
-            $B.ForeColor = $script:Theme.TextMuted
-        }
-    }
 
     # Initial State Evaluation
     try {
