@@ -27,7 +27,22 @@ jobs:
       - name: Compile AdminWorks.ps1
         shell: powershell
         run: |
-          Invoke-ps2exe -inputFile ".\AdminWorks.ps1" -outputFile ".\AdminWorks.exe" -noConsole -title "AdminWorks" -company "Kushagra Karira" -version "5.0.0.0" -requireAdmin -iconFile ".\app.ico"
+          Invoke-ps2exe `
+            -inputFile ".\AdminWorks.ps1" `
+            -outputFile ".\AdminWorks.exe" `
+            -noConsole `
+            -x64 `
+            -dpiAware `
+            -supportOS `
+            -requireAdmin `
+            -iconFile ".\app.ico" `
+            -title "AdminWorks Pro" `
+            -product "AdminWorks Enterprise Suite" `
+            -description "Enterprise Windows Administration & Optimization Suite" `
+            -company "Kushagra Karira" `
+            -copyright "Copyright (c) 2026 Kushagra Karira" `
+            -originalFilename "AdminWorks.exe" `
+            -version "5.0.0.0"
 
       - name: Upload EXE Artifacts
         uses: actions/upload-artifact@v5
