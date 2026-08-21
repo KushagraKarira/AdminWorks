@@ -1,6 +1,6 @@
 <#
 ================================================================================
-  ADMINWORKS PRO v4.8 - Enterprise Windows Administration & Optimization Suite
+  ADMINWORKS PRO v5.0 - Enterprise Windows Administration & Optimization Suite
   Compatible with Windows 10 & Windows 11
 ================================================================================
 #>
@@ -169,7 +169,7 @@ $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
     ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 12, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false
 }
 $TitleSub = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "ENTERPRISE SUITE v4.8  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(46, 36); AutoSize = $true
+    Text        = "ENTERPRISE SUITE v5.0  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(46, 36); AutoSize = $true
     ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
     Cursor      = [System.Windows.Forms.Cursors]::Hand; UseMnemonic = $false
 }
@@ -460,6 +460,7 @@ try {
 
 # --- [Card Engine & Registration Setup] ---
 $script:AllCards = New-Object System.Collections.Generic.List[PSObject]
+$script:ToggleCards = New-Object System.Collections.Generic.List[PSObject]
 $script:CategoryPanels = @{}
 $script:SidebarItems = @{}
 $script:CurrentTabId = "Presets"
@@ -643,17 +644,197 @@ function New-TweakCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc,
     })
 }
 
+# --- [State-Aware Dynamic Toggle Card Engine] ---
+function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc, $CheckAction, $EnableAction, $DisableAction) {
+    $P = New-Object System.Windows.Forms.Panel -Property @{
+        Size      = New-Object System.Drawing.Size(320, 146)
+        BackColor = $script:Theme.Card
+        Margin    = New-Object System.Windows.Forms.Padding(6)
+    }
+
+    $TagLbl = New-Object System.Windows.Forms.Label -Property @{
+        Text        = "$($CategoryTag.ToUpper())  $($UI.Bullet)  TOGGLE"
+        Location    = New-Object System.Drawing.Point(12, 8); AutoSize = $true
+        ForeColor   = $script:Theme.AccentGlow
+        Font        = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
+        UseMnemonic = $false
+    }
+
+    $IconLbl = New-Object System.Windows.Forms.Label -Property @{
+        Text        = $IconGlyph
+        Location    = New-Object System.Drawing.Point(10, 26); Size = New-Object System.Drawing.Size(20, 20)
+        ForeColor   = $script:Theme.AccentGlow
+        Font        = New-Object System.Drawing.Font($IconFont, 9.5)
+        UseMnemonic = $false
+    }
+
+    $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
+        Text         = $Title
+        Location     = New-Object System.Drawing.Point(32, 26)
+        Size         = New-Object System.Drawing.Size(270, 20)
+        Anchor       = [System.Windows.Forms.AnchorStyles]"Top, Left, Right"
+        ForeColor    = $script:Theme.TextMain
+        Font         = New-Object System.Drawing.Font($GlobalFont, 9, [System.Drawing.FontStyle]::Bold)
+        AutoEllipsis = $true
+        UseMnemonic  = $false
+    }
+
+    $DescLbl = New-Object System.Windows.Forms.Label -Property @{
+        Text         = $Desc
+        Location     = New-Object System.Drawing.Point(12, 50)
+        Size         = New-Object System.Drawing.Size(294, 48)
+        Anchor       = [System.Windows.Forms.AnchorStyles]"Top, Left, Right"
+        ForeColor    = $script:Theme.TextMuted
+        Font         = New-Object System.Drawing.Font($GlobalFont, 8)
+        AutoEllipsis = $true
+        UseMnemonic  = $false
+    }
+
+    $P.Add_MouseEnter({ $this.BackColor = $script:Theme.CardHover })
+    $P.Add_MouseLeave({ $this.BackColor = $script:Theme.Card })
+
+    $Btn = New-Object System.Windows.Forms.Button -Property @{
+        Text        = "CHECKING..."
+        Size        = New-Object System.Drawing.Size(100, 26)
+        Location    = New-Object System.Drawing.Point(208, 110)
+        Anchor      = [System.Windows.Forms.AnchorStyles]"Bottom, Right"
+        FlatStyle   = "Flat"
+        BackColor   = $script:Theme.SidebarActive
+        ForeColor   = $script:Theme.TextMuted
+        Font        = New-Object System.Drawing.Font($GlobalFont, 7.5, [System.Drawing.FontStyle]::Bold)
+        Cursor      = [System.Windows.Forms.Cursors]::Hand
+        UseMnemonic = $false
+    }
+    $Btn.FlatAppearance.BorderSize = 0
+
+    $ToggleMeta = [PSCustomObject]@{
+        Button        = $Btn
+        CheckCode     = $CheckAction.ToString()
+        EnableCode    = $EnableAction.ToString()
+        DisableCode   = $DisableAction.ToString()
+        IsActive      = $false
+    }
+
+    $Btn.Tag = $ToggleMeta
+
+    function Update-ToggleStateVisual ($B, $Active) {
+        $B.Tag.IsActive = $Active
+        if ($Active) {
+            $B.Text = "ON (ACTIVE)"
+            $B.BackColor = $script:Theme.Success
+            $B.ForeColor = [System.Drawing.Color]::White
+        } else {
+            $B.Text = "OFF (INACTIVE)"
+            $B.BackColor = $script:Theme.SidebarActive
+            $B.ForeColor = $script:Theme.TextMuted
+        }
+    }
+
+    # Initial State Evaluation
+    try {
+        $initStatus = [bool](& ([scriptblock]::Create($ToggleMeta.CheckCode)))
+        Update-ToggleStateVisual $Btn $initStatus
+    } catch {
+        Update-ToggleStateVisual $Btn $false
+    }
+
+    $Btn.Add_Click({
+        $B = $this
+        $Meta = $B.Tag
+        $CurrentOn = $Meta.IsActive
+        $TargetCode = if ($CurrentOn) { $Meta.DisableCode } else { $Meta.EnableCode }
+        $TargetLabel = if ($CurrentOn) { "DISABLING..." } else { "ENABLING..." }
+
+        $B.Enabled = $false
+        $B.Text = $TargetLabel
+        $B.BackColor = $script:Theme.Warning
+        $B.ForeColor = [System.Drawing.Color]::Black
+
+        $PS = [powershell]::Create().AddScript({
+            param($CodeStr, $LogBox, $Theme, $BackupDir)
+            $global:BackupDir = $BackupDir
+            
+            function Write-Log ($Msg, $Type = "Info") {
+                if ([string]::IsNullOrWhiteSpace($Msg)) { return }
+                $LogBox.Invoke([Action[string, string]]{
+                    param($m, $t)
+                    $LogBox.SelectionStart = $LogBox.TextLength
+                    $LogBox.SelectionColor = switch ($t) {
+                        "Success" { $Theme.Success }
+                        "Warning" { $Theme.Warning }
+                        "Error"   { $Theme.Danger }
+                        "Exec"    { $Theme.AccentGlow }
+                        Default   { $Theme.TextMuted }
+                    }
+                    $LogBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [$($t.ToUpper().PadRight(7))] $m`n")
+                    $LogBox.ScrollToCaret()
+                }, $Msg, $Type)
+            }
+
+            try {
+                $Exec = [scriptblock]::Create($CodeStr)
+                & $Exec
+            } catch {
+                Write-Log "Execution Error: $($_.Exception.Message)" "Error"
+            }
+        }).AddArgument($TargetCode).AddArgument($LogBox).AddArgument($script:Theme).AddArgument($script:BackupDir)
+
+        $Runspace = [runspacefactory]::CreateRunspace()
+        $Runspace.ThreadOptions = "ReuseThread"
+        $Runspace.Open()
+        $PS.Runspace = $Runspace
+
+        $null = $PS.BeginInvoke()
+
+        $Timer = New-Object System.Windows.Forms.Timer
+        $Timer.Interval = 350
+        $Timer.Tag = @{ Button = $B; PS = $PS; Runspace = $Runspace; Meta = $Meta }
+        $Timer.Add_Tick({
+            $State = $this.Tag
+            if ($State.PS.InvocationStateInfo.State -ne "Running") {
+                $State.Button.Enabled = $true
+
+                try {
+                    $newStatus = [bool](& ([scriptblock]::Create($State.Meta.CheckCode)))
+                    Update-ToggleStateVisual $State.Button $newStatus
+                } catch {
+                    Update-ToggleStateVisual $State.Button (-not $State.Meta.IsActive)
+                }
+
+                $State.PS.Dispose()
+                $State.Runspace.Close()
+                $State.Runspace.Dispose()
+
+                $this.Stop()
+                $this.Dispose()
+            }
+        })
+        $Timer.Start()
+    })
+
+    $P.Controls.AddRange(@($TagLbl, $IconLbl, $TitleLbl, $DescLbl, $Btn))
+    $CategoryPanel.Controls.Add($P)
+
+    $script:AllCards.Add([PSCustomObject]@{
+        Title       = $Title
+        Category    = $CategoryTag
+        Description = $Desc
+        Panel       = $P
+    })
+    $script:ToggleCards.Add($ToggleMeta)
+}
+
 # --- [Sidebar Tabs Navigation Definition] ---
 $TabList = @(
     @{ Id = "Presets";   Icon = $UI.Presets;  Name = "Preset Profiles"; Desc = "1-Click Curated Optimization & Safety Profiles" },
-    @{ Id = "Maint";     Icon = $UI.Maint;    Name = "Maintenance";     Desc = "DISM, SFC, WinSxS reduction, Component Repair & Update Fixes" },
+    @{ Id = "Maint";     Icon = $UI.Maint;    Name = "Maintenance";     Desc = "DISM, SFC, WinSxS reduction, Component Repair & Event Log Cleaning" },
     @{ Id = "Perf";      Icon = $UI.Perf;     Name = "Performance";     Desc = "Power plans, Thread priority separation, RAM & Latency Tuning" },
-    @{ Id = "Net";       Icon = $UI.Net;      Name = "Network & DNS";   Desc = "DNS benchmarks, Wi-Fi keys, TCP/IP stack & LAN Discovery" },
-    @{ Id = "Privacy";   Icon = $UI.Privacy;  Name = "Privacy & Bloat"; Desc = "Telemetry removal, Bing search, Recall AI & Consumer Debloat" },
-    @{ Id = "Context";   Icon = $UI.Context;  Name = "Shell & Explorer";Desc = "Classic Context Menus, File extensions, Ownership & Pro Tools" },
-    @{ Id = "Hardware";  Icon = $UI.Hardware; Name = "Hardware Audit";  Desc = "SMART Disk health, RAM Module speeds, Battery & GPU Specs" },
-    @{ Id = "Apps";      Icon = $UI.Apps;     Name = "Software Hub";    Desc = "Winget package updater, App export & Essential SysAdmin Tools" },
-    @{ Id = "Admin";     Icon = $UI.Admin;    Name = "Admin Utilities"; Desc = "Master GodMode, Restore checkpoints & Windows Admin Consoles" }
+    @{ Id = "Net";       Icon = $UI.Net;      Name = "Network & DNS";   Desc = "DNS benchmarks, Wi-Fi keys, TCP/IP stack, RDP & Port Listeners" },
+    @{ Id = "Privacy";   Icon = $UI.Privacy;  Name = "Privacy & Bloat"; Desc = "Telemetry removal, Bing search, Recall AI & Lock Screen Ads" },
+    @{ Id = "Context";   Icon = $UI.Context;  Name = "Shell & Explorer";Desc = "Classic Context Menus, File extensions, Compact Mode & Pro Tools" },
+    @{ Id = "Hardware";  Icon = $UI.Hardware; Name = "Hardware Audit";  Desc = "SMART Disk health, BIOS/UEFI, RAM Module speeds & GPU Specs" },
+    @{ Id = "Apps";      Icon = $UI.Apps;     Name = "Software Hub";    Desc = "Winget package updater, WinToys, VLC, SumatraPDF & SysAdmin Bundles" },
+    @{ Id = "Admin";     Icon = $UI.Admin;    Name = "Admin Utilities"; Desc = "Master GodMode, License audit, Open shares & Windows Admin Consoles" }
 )
 
 function Select-Tab($TargetId) {
@@ -696,7 +877,7 @@ foreach ($tab in $TabList) {
     $ViewContainer.Controls.Add($Flow)
     $script:CategoryPanels[$tab.Id] = $Flow
 
-    # Category Section Banner Header (Separate Icon and Text Labels to prevent glyph box [])
+    # Category Section Banner Header
     $Banner = New-Object System.Windows.Forms.FlowLayoutPanel -Property @{
         Height        = 34
         Width         = 1200
@@ -952,6 +1133,31 @@ New-TweakCard $P_Maint $UI.Maint "Reset Print Spooler" "Printer Fix" "Clears stu
     Write-Log "Print Spooler reset and queue cleared." "Success"
 }
 
+New-TweakCard $P_Maint $UI.Admin "Purge Windows Event Logs" "Log Cleaner" "Clears all Application, System, Security, and Setup event logs to free space." {
+    Write-Log "Purging all Windows Event Logs..." "Exec"
+    Get-WinEvent -ListLog * -Force -ErrorAction SilentlyContinue | Where-Object { $_.RecordCount -gt 0 } | ForEach-Object {
+        try {
+            [System.Diagnostics.Eventing.Reader.EventLogSession]::GlobalSession.ClearLog($_.LogName)
+            Write-Log "Cleared log: $($_.LogName)" "Info"
+        } catch {}
+    }
+    Write-Log "Windows Event Logs purge completed." "Success"
+}
+
+New-TweakCard $P_Maint $UI.Disk "Empty All Recycle Bins" "Disk Reclaim" "Purges deleted files in the Recycle Bin across all local and removable volumes." {
+    Write-Log "Emptying Recycle Bin on all drives..." "Exec"
+    Clear-RecycleBin -Force -ErrorAction SilentlyContinue
+    Write-Log "Recycle Bins emptied successfully." "Success"
+}
+
+New-TweakCard $P_Maint $UI.Refresh "Rebuild Windows Search Index" "Search Fix" "Stops search service, resets index catalog database, and forces rebuild." {
+    Write-Log "Resetting Windows Search indexing database..." "Warning"
+    Stop-Service wsearch -Force -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows Search" -Name "SetupCompletedSuccessfully" -Value 0 -ErrorAction SilentlyContinue
+    Start-Service wsearch -ErrorAction SilentlyContinue
+    Write-Log "Windows Search indexing service reset and catalog rebuilding." "Success"
+}
+
 # ------------------------------------------------------------------------------
 # 3. PERFORMANCE & GAMING
 # ------------------------------------------------------------------------------
@@ -974,16 +1180,29 @@ New-TweakCard $P_Perf $UI.Cpu "Foreground CPU Boost" "Thread Priority" "Configur
     Write-Log "Foreground app priority separation optimized (Value: 38)." "Success"
 }
 
-New-TweakCard $P_Perf $UI.Sparkle "Kill GameDVR & Capture" "Gaming Latency" "Disables Xbox GameDVR background screen recording to eliminate micro-stuttering." {
-    reg add "HKCU\System\GameConfigStore" /v "GameDVR_Enabled" /t REG_DWORD /d 0 /f | Out-Null
-    reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\GameDVR" /v "AllowGameDVR" /t REG_DWORD /d 0 /f | Out-Null
-    Write-Log "GameDVR background capture disabled." "Success"
-}
+New-ToggleCard $P_Perf $UI.Sparkle "Kill GameDVR & Capture" "Gaming Latency" "Disables Xbox GameDVR background screen recording to eliminate micro-stuttering." `
+    { (Get-ItemProperty "HKCU:\System\GameConfigStore" -ErrorAction SilentlyContinue).GameDVR_Enabled -eq 0 } `
+    {
+        reg add "HKCU\System\GameConfigStore" /v "GameDVR_Enabled" /t REG_DWORD /d 0 /f | Out-Null
+        reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\GameDVR" /v "AllowGameDVR" /t REG_DWORD /d 0 /f | Out-Null
+        Write-Log "GameDVR background capture disabled (Gaming Boost ON)." "Success"
+    } `
+    {
+        reg add "HKCU\System\GameConfigStore" /v "GameDVR_Enabled" /t REG_DWORD /d 1 /f | Out-Null
+        reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\GameDVR" /v "AllowGameDVR" /t REG_DWORD /d 1 /f | Out-Null
+        Write-Log "GameDVR background capture re-enabled." "Warning"
+    }
 
-New-TweakCard $P_Perf $UI.Disk "Disable Hibernation" "Storage & Power" "Runs 'powercfg -h off' to eliminate hiberfil.sys and free storage." {
-    powercfg -h off
-    Write-Log "Hibernation disabled (hiberfil.sys removed)." "Success"
-}
+New-ToggleCard $P_Perf $UI.Disk "Disable Hibernation" "Storage & Power" "Runs 'powercfg -h off' to eliminate hiberfil.sys and free gigabytes of drive space." `
+    { (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Power" -ErrorAction SilentlyContinue).HibernateEnabled -eq 0 -or -not (Test-Path "$env:SystemDrive\hiberfil.sys") } `
+    {
+        powercfg -h off
+        Write-Log "Hibernation disabled (hiberfil.sys removed)." "Success"
+    } `
+    {
+        powercfg -h on
+        Write-Log "Hibernation enabled (hiberfil.sys restored)." "Warning"
+    }
 
 New-TweakCard $P_Perf $UI.Hardware "Disable USB Suspend" "Hardware Latency" "Disables USB Selective Suspend to prevent disconnects on peripherals." {
     powercfg /SETACVALUEINDEX SCHEME_CURRENT 2a84c312-a001-40c3-b31f-1393d254d070 48e6b7a6-50f2-4389-a784-1779c7b048db 0
@@ -1061,11 +1280,45 @@ New-TweakCard $P_Net $UI.Hardware "Scan LAN Subnet Devices" "Network Discovery" 
     foreach ($line in $arp) {
         $parts = $line.Line.Trim() -split "\s+"
         if ($parts.Count -ge 2) {
-            Write-Log "Active Host: IP $($parts[0]) | MAC $($parts)" "Info"
+            Write-Log "Active Host: IP $($parts[0]) | MAC $($parts[1])" "Info"
         }
     }
     Write-Log "Subnet discovery complete." "Success"
 }
+
+New-TweakCard $P_Net $UI.Admin "Port & Process Listeners" "Network Security" "Scans active listening TCP ports and maps them to host application executables." {
+    Write-Log "Auditing listening ports & processes..." "Exec"
+    Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | ForEach-Object {
+        $proc = Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue
+        $pName = if ($proc) { $proc.Name } else { "System/Unknown" }
+        Write-Log "Port $($_.LocalPort) ($($_.LocalAddress)) -> $pName (PID $($_.OwningProcess))" "Info"
+    }
+    Write-Log "Port audit complete." "Success"
+}
+
+New-TweakCard $P_Net $UI.Net "Public IP & Geo-Location" "WAN Diagnostics" "Queries external routing APIs to retrieve WAN IP, ISP, ASN, and city location." {
+    Write-Log "Resolving Public WAN IP & ISP..." "Exec"
+    try {
+        $info = Invoke-RestMethod -Uri "https://ipinfo.io/json" -TimeoutSec 4
+        Write-Log "Public IP: $($info.ip) | ISP: $($info.org)" "Success"
+        Write-Log "Location: $($info.city), $($info.region), $($info.country)" "Info"
+    } catch {
+        Write-Log "Failed to reach IP resolution service. Check internet connectivity." "Error"
+    }
+}
+
+New-ToggleCard $P_Net $UI.Shield "Remote Desktop (RDP)" "Remote Admin" "Toggles Windows Terminal Server RDP listener and firewall exception rule." `
+    { (Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -ErrorAction SilentlyContinue).fDenyTSConnections -eq 0 } `
+    {
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
+        Write-Log "Remote Desktop (RDP) enabled and firewall opened." "Success"
+    } `
+    {
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 1
+        Disable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
+        Write-Log "Remote Desktop (RDP) disabled." "Warning"
+    }
 
 # ------------------------------------------------------------------------------
 # 5. PRIVACY, SECURITY & DEBLOAT
@@ -1093,13 +1346,22 @@ New-TweakCard $P_Privacy $UI.Apps "Universal OEM Debloat" "App Purge" "Removes c
     Write-Log "$count bloatware packages purged." "Success"
 }
 
-New-TweakCard $P_Privacy $UI.Search "Disable Copilot & Web Search" "Windows 11 UI" "Disables Windows Copilot, Taskbar Widgets, and Start Menu Bing Web search." {
-    reg add "HKCU\Software\Policies\Microsoft\Windows\WindowsCopilot" /v "TurnOffWindowsCopilot" /t REG_DWORD /d 1 /f | Out-Null
-    reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v "TaskbarDa" /t REG_DWORD /d 0 /f | Out-Null
-    reg add "HKCU\Software\Policies\Microsoft\Windows\Explorer" /v "DisableSearchBoxSuggestions" /t REG_DWORD /d 1 /f | Out-Null
-    reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\SearchSettings" /v "IsDynamicSearchBoxEnabled" /t REG_DWORD /d 0 /f | Out-Null
-    Write-Log "Windows Copilot, Widgets, and Start Web Search disabled." "Success"
-}
+New-ToggleCard $P_Privacy $UI.Search "Disable Copilot & Web Search" "Windows 11 UI" "Toggles Windows Copilot, Taskbar Widgets, and Start Menu Bing Web search." `
+    { (Get-ItemProperty 'HKCU:\Software\Policies\Microsoft\Windows\WindowsCopilot' -ErrorAction SilentlyContinue).TurnOffWindowsCopilot -eq 1 } `
+    {
+        reg add "HKCU\Software\Policies\Microsoft\Windows\WindowsCopilot" /v "TurnOffWindowsCopilot" /t REG_DWORD /d 1 /f | Out-Null
+        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v "TaskbarDa" /t REG_DWORD /d 0 /f | Out-Null
+        reg add "HKCU\Software\Policies\Microsoft\Windows\Explorer" /v "DisableSearchBoxSuggestions" /t REG_DWORD /d 1 /f | Out-Null
+        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\SearchSettings" /v "IsDynamicSearchBoxEnabled" /t REG_DWORD /d 0 /f | Out-Null
+        Write-Log "Windows Copilot, Widgets, and Start Web Search disabled." "Success"
+    } `
+    {
+        reg delete "HKCU\Software\Policies\Microsoft\Windows\WindowsCopilot" /v "TurnOffWindowsCopilot" /f 2>$null | Out-Null
+        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v "TaskbarDa" /t REG_DWORD /d 1 /f | Out-Null
+        reg delete "HKCU\Software\Policies\Microsoft\Windows\Explorer" /v "DisableSearchBoxSuggestions" /f 2>$null | Out-Null
+        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\SearchSettings" /v "IsDynamicSearchBoxEnabled" /t REG_DWORD /d 0 /f | Out-Null
+        Write-Log "Windows Copilot and Search Suggestions restored." "Warning"
+    }
 
 New-TweakCard $P_Privacy $UI.Privacy "Disable Recall & AI Tracking" "Privacy" "Disables Windows Recall AI screen recording and snapshot feature." {
     $EnvWin11 = ([Environment]::OSVersion.Version.Build -ge 22000)
@@ -1111,13 +1373,22 @@ New-TweakCard $P_Privacy $UI.Privacy "Disable Recall & AI Tracking" "Privacy" "D
     }
 }
 
-New-TweakCard $P_Privacy $UI.Shield "Kill Telemetry & DiagTrack" "Privacy" "Disables Connected User Experiences (DiagTrack), dmwappushservice, and telemetry." {
-    Stop-Service "DiagTrack", "dmwappushservice" -ErrorAction SilentlyContinue
-    Set-Service "DiagTrack", "dmwappushservice" -StartupType Disabled -ErrorAction SilentlyContinue
-    reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection" /v AllowTelemetry /t REG_DWORD /d 0 /f | Out-Null
-    reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Privacy" /v "TailoredExperiencesWithDiagnosticDataEnabled" /t REG_DWORD /d 0 /f | Out-Null
-    Write-Log "Diagnostic data and telemetry logging disabled." "Success"
-}
+New-ToggleCard $P_Privacy $UI.Shield "Kill Telemetry & DiagTrack" "Privacy" "Toggles Connected User Experiences (DiagTrack), dmwappushservice, and telemetry." `
+    { (Get-Service "DiagTrack" -ErrorAction SilentlyContinue).StartType -eq "Disabled" } `
+    {
+        Stop-Service "DiagTrack", "dmwappushservice" -ErrorAction SilentlyContinue
+        Set-Service "DiagTrack", "dmwappushservice" -StartupType Disabled -ErrorAction SilentlyContinue
+        reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection" /v AllowTelemetry /t REG_DWORD /d 0 /f | Out-Null
+        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Privacy" /v "TailoredExperiencesWithDiagnosticDataEnabled" /t REG_DWORD /d 0 /f | Out-Null
+        Write-Log "Diagnostic data and telemetry logging disabled." "Success"
+    } `
+    {
+        Set-Service "DiagTrack", "dmwappushservice" -StartupType Automatic -ErrorAction SilentlyContinue
+        Start-Service "DiagTrack" -ErrorAction SilentlyContinue
+        reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection" /v AllowTelemetry /f 2>$null | Out-Null
+        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Privacy" /v "TailoredExperiencesWithDiagnosticDataEnabled" /t REG_DWORD /d 1 /f | Out-Null
+        Write-Log "Telemetry services restored." "Warning"
+    }
 
 New-TweakCard $P_Privacy $UI.Shield "Block Telemetry in Hosts" "Security" "Appends known telemetry, diagnostic, and ad endpoints to hosts file." {
     $hosts = "$env:SystemRoot\System32\drivers\etc\hosts"
@@ -1132,52 +1403,123 @@ New-TweakCard $P_Privacy $UI.Shield "Block Telemetry in Hosts" "Security" "Appen
     Write-Log "Hosts file telemetry filter updated." "Success"
 }
 
+New-ToggleCard $P_Privacy $UI.Privacy "Lock Screen Spotlight & Ads" "UI Cleanup" "Toggles dynamic promotional suggestions, lockscreen tips, and feedback notifications." `
+    { (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -ErrorAction SilentlyContinue)."SubscribedContent-338388Enabled" -eq 0 } `
+    {
+        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SubscribedContent-338388Enabled" /t REG_DWORD /d 0 /f | Out-Null
+        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SubscribedContent-310093Enabled" /t REG_DWORD /d 0 /f | Out-Null
+        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SystemPaneSuggestionsEnabled" /t REG_DWORD /d 0 /f | Out-Null
+        Write-Log "Lock Screen Spotlight and suggestion feeds disabled." "Success"
+    } `
+    {
+        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SubscribedContent-338388Enabled" /t REG_DWORD /d 1 /f | Out-Null
+        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SubscribedContent-310093Enabled" /t REG_DWORD /d 1 /f | Out-Null
+        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v "SystemPaneSuggestionsEnabled" /t REG_DWORD /d 1 /f | Out-Null
+        Write-Log "Lock Screen dynamic feeds re-enabled." "Warning"
+    }
+
+New-ToggleCard $P_Privacy $UI.Admin "Activity History & Timeline" "Privacy" "Toggles local Windows application activity tracking and cloud telemetry sync." `
+    { (Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -ErrorAction SilentlyContinue).EnableActivityFeed -eq 0 } `
+    {
+        reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\System" /v "EnableActivityFeed" /t REG_DWORD /d 0 /f | Out-Null
+        reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\System" /v "PublishUserActivities" /t REG_DWORD /d 0 /f | Out-Null
+        Write-Log "Windows Activity History tracking disabled." "Success"
+    } `
+    {
+        reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\System" /v "EnableActivityFeed" /f 2>$null | Out-Null
+        reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\System" /v "PublishUserActivities" /f 2>$null | Out-Null
+        Write-Log "Windows Activity History tracking enabled." "Warning"
+    }
+
 # ------------------------------------------------------------------------------
 # 6. SHELL & CONTEXT MENU
 # ------------------------------------------------------------------------------
 $P_Context = $script:CategoryPanels["Context"]
 
-New-TweakCard $P_Context $UI.Context "Classic Context Menu" "Windows 11 UI" "Restores the Windows 10 full right-click context menu without 'Show more options'." {
-    $EnvWin11 = ([Environment]::OSVersion.Version.Build -ge 22000)
-    if (-not $EnvWin11) {
-        Write-Log "Classic Context Menu tweak is only required on Windows 11." "Info"
-        return
+New-ToggleCard $P_Context $UI.Context "Classic Context Menu" "Windows 11 UI" "Toggles the Windows 10 full right-click context menu without 'Show more options'." `
+    { Test-Path "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" } `
+    {
+        reg add "HKCU\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" /f /ve | Out-Null
+        Stop-Process -Name explorer -Force
+        Start-Sleep -Milliseconds 600
+        if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe }
+        Write-Log "Classic Context Menu enabled." "Success"
+    } `
+    {
+        reg delete "HKCU\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}" /f 2>$null | Out-Null
+        Stop-Process -Name explorer -Force
+        Start-Sleep -Milliseconds 600
+        if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe }
+        Write-Log "Windows 11 Modern Context Menu restored." "Warning"
     }
-    reg add "HKCU\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" /f /ve | Out-Null
-    Stop-Process -Name explorer -Force
-    Start-Sleep -Milliseconds 600
-    if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe }
-    Write-Log "Windows 10 Classic Context Menu restored." "Success"
-}
 
-New-TweakCard $P_Context $UI.Admin "Add 'Take Ownership'" "Context Menu" "Adds a 'Take Ownership' option to file and folder right-click context menus." {
-    $regPath = "HKCR:\*\shell\runas"
-    New-Item -Path $regPath -Force | Out-Null
-    Set-ItemProperty -Path $regPath -Name "(Default)" -Value "Take Ownership"
-    Set-ItemProperty -Path $regPath -Name "NoWorkingDirectory" -Value ""
-    New-Item -Path "$regPath\command" -Force | Out-Null
-    Set-ItemProperty -Path "$regPath\command" -Name "(Default)" -Value "cmd.exe /c takeown /f `"%1`" && icacls `"%1`" /grant administrators:F"
-    Write-Log "Take Ownership context menu shortcut added." "Success"
-}
+New-ToggleCard $P_Context $UI.Admin "Add 'Take Ownership'" "Context Menu" "Toggles a 'Take Ownership' option on file and folder right-click menus." `
+    { Test-Path "HKCR:\*\shell\runas" } `
+    {
+        $regPath = "HKCR:\*\shell\runas"
+        New-Item -Path $regPath -Force | Out-Null
+        Set-ItemProperty -Path $regPath -Name "(Default)" -Value "Take Ownership"
+        Set-ItemProperty -Path $regPath -Name "NoWorkingDirectory" -Value ""
+        New-Item -Path "$regPath\command" -Force | Out-Null
+        Set-ItemProperty -Path "$regPath\command" -Name "(Default)" -Value "cmd.exe /c takeown /f `"%1`" && icacls `"%1`" /grant administrators:F"
+        Write-Log "Take Ownership context menu shortcut added." "Success"
+    } `
+    {
+        Remove-Item "HKCR:\*\shell\runas" -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Log "Take Ownership context menu shortcut removed." "Warning"
+    }
 
-New-TweakCard $P_Context $UI.Admin "Add 'PowerShell Admin Here'" "Context Menu" "Adds an 'Open PowerShell as Administrator' shortcut to right-clicks on folders." {
-    $regPath = "HKCR:\Directory\Background\shell\OpenElevatedPS"
-    New-Item -Path $regPath -Force | Out-Null
-    Set-ItemProperty -Path $regPath -Name "(Default)" -Value "Open PowerShell As Admin Here"
-    Set-ItemProperty -Path $regPath -Name "Icon" -Value "powershell.exe"
-    New-Item -Path "$regPath\command" -Force | Out-Null
-    Set-ItemProperty -Path "$regPath\command" -Name "(Default)" -Value "powershell.exe -Command `"Start-Process powershell -Verb RunAs -WorkingDirectory '%V'`""
-    Write-Log "'Open PowerShell As Admin Here' added." "Success"
-}
+New-ToggleCard $P_Context $UI.Admin "Add 'PowerShell Admin Here'" "Context Menu" "Toggles an 'Open PowerShell as Administrator' shortcut on background folder clicks." `
+    { Test-Path "HKCR:\Directory\Background\shell\OpenElevatedPS" } `
+    {
+        $regPath = "HKCR:\Directory\Background\shell\OpenElevatedPS"
+        New-Item -Path $regPath -Force | Out-Null
+        Set-ItemProperty -Path $regPath -Name "(Default)" -Value "Open PowerShell As Admin Here"
+        Set-ItemProperty -Path $regPath -Name "Icon" -Value "powershell.exe"
+        New-Item -Path "$regPath\command" -Force | Out-Null
+        Set-ItemProperty -Path "$regPath\command" -Name "(Default)" -Value "powershell.exe -Command `"Start-Process powershell -Verb RunAs -WorkingDirectory '%V'`""
+        Write-Log "'Open PowerShell As Admin Here' added." "Success"
+    } `
+    {
+        Remove-Item "HKCR:\Directory\Background\shell\OpenElevatedPS" -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Log "'Open PowerShell As Admin Here' removed." "Warning"
+    }
 
-New-TweakCard $P_Context $UI.Context "File Explorer Pro Mode" "File System" "Shows file extensions (.exe, .txt), unhides system files, and shows full title paths." {
-    Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -Value 0
-    Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Hidden" -Value 1
-    Stop-Process -Name explorer -Force
-    Start-Sleep -Milliseconds 600
-    if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe }
-    Write-Log "File Explorer configured to show extensions and hidden files." "Success"
-}
+New-ToggleCard $P_Context $UI.Context "File Explorer Pro Mode" "File System" "Toggles file extensions (.exe, .txt), unhides system files, and shows full title paths." `
+    { (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -ErrorAction SilentlyContinue).HideFileExt -eq 0 } `
+    {
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -Value 0
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Hidden" -Value 1
+        Stop-Process -Name explorer -Force
+        Start-Sleep -Milliseconds 600
+        if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe }
+        Write-Log "File Explorer configured to show extensions and hidden files." "Success"
+    } `
+    {
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -Value 1
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Hidden" -Value 2
+        Stop-Process -Name explorer -Force
+        Start-Sleep -Milliseconds 600
+        if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe }
+        Write-Log "File Explorer returned to default view." "Warning"
+    }
+
+New-ToggleCard $P_Context $UI.Context "Explorer Compact View" "Windows 11 UI" "Toggles dense compact folder row spacing in Windows 11 File Explorer." `
+    { (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -ErrorAction SilentlyContinue).UseCompactMode -eq 1 } `
+    {
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "UseCompactMode" -Value 1
+        Stop-Process -Name explorer -Force
+        Start-Sleep -Milliseconds 500
+        Start-Process explorer.exe
+        Write-Log "File Explorer Compact View enabled." "Success"
+    } `
+    {
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "UseCompactMode" -Value 0
+        Stop-Process -Name explorer -Force
+        Start-Sleep -Milliseconds 500
+        Start-Process explorer.exe
+        Write-Log "File Explorer Compact View disabled." "Warning"
+    }
 
 # ------------------------------------------------------------------------------
 # 7. HARDWARE & STORAGE AUDIT
@@ -1211,6 +1553,32 @@ New-TweakCard $P_Hw $UI.Hardware "GPU & Display Audit" "Graphics Specs" "Inspect
     Get-CimInstance Win32_VideoController | ForEach-Object {
         Write-Log "GPU: $($_.Name) - Driver: $($_.DriverVersion) - Resolution: $($_.CurrentHorizontalResolution)x$($_.CurrentVerticalResolution) @ $($_.CurrentRefreshRate)Hz" "Success"
     }
+}
+
+New-TweakCard $P_Hw $UI.Admin "Motherboard & BIOS Audit" "Firmware Specs" "Retrieves baseboard manufacturer, model, BIOS/UEFI version, and Secure Boot status." {
+    Write-Log "Inspecting Motherboard & BIOS/UEFI firmware..." "Exec"
+    $bb = Get-CimInstance Win32_BaseBoard
+    $bios = Get-CimInstance Win32_BIOS
+    $sb = try { (Confirm-SecureBootUEFI) } catch { "Unsupported/Legacy" }
+    Write-Log "Motherboard: $($bb.Manufacturer) $($bb.Product)" "Success"
+    Write-Log "BIOS/UEFI: $($bios.SMBIOSBIOSVersion) (Released: $($bios.ReleaseDate.ToString('yyyy-MM-dd')))" "Info"
+    Write-Log "Secure Boot State: $sb" "Info"
+}
+
+New-TweakCard $P_Hw $UI.Cpu "CPU Virtualization Audit" "CPU Topology" "Checks hardware virtualization flags (VT-x / AMD-V), Hyper-V status, and core topology." {
+    Write-Log "Auditing CPU architecture & virtualization..." "Exec"
+    $proc = Get-CimInstance Win32_Processor | Select-Object -First 1
+    Write-Log "Processor: $($proc.Name)" "Success"
+    Write-Log "Cores: $($proc.NumberOfCores) | Logical Threads: $($proc.NumberOfLogicalProcessors) | Max Clock: $($proc.MaxClockSpeed) MHz" "Info"
+    Write-Log "Firmware Virtualization Enabled: $($proc.VirtualizationFirmwareEnabled)" "Success"
+}
+
+New-TweakCard $P_Hw $UI.Disk "Disk Sector & Partition Audit" "Drive Specs" "Audits physical sector sizes (4Kn vs 512e) and partition tables per disk." {
+    Write-Log "Auditing disk geometry & partition styles..." "Exec"
+    Get-Disk | ForEach-Object {
+        Write-Log "Disk #$($_.Number): $($_.FriendlyName) | Style: $($_.PartitionStyle) | SectorSize: $($_.PhysicalSectorSize)B" "Info"
+    }
+    Write-Log "Storage geometry audit complete." "Success"
 }
 
 # ------------------------------------------------------------------------------
@@ -1247,6 +1615,27 @@ New-TweakCard $P_Apps $UI.Apps "Backup Installed Apps List" "Package Manager" "E
     Write-Log "Installed apps exported to: $outPath" "Success"
 }
 
+New-TweakCard $P_Apps $UI.Admin "Install WinToys" "Optimization Tools" "Installs WinToys from the Microsoft Store for advanced Windows customization." {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing." "Error"; return }
+    Write-Log "Installing WinToys..." "Exec"
+    winget install 9P8LTPGCBZXD --source msstore --accept-package-agreements --accept-source-agreements | ForEach-Object { if ($_.Trim() -ne "") { Write-Log $_ "Info" } }
+    Write-Log "WinToys installation completed." "Success"
+}
+
+New-TweakCard $P_Apps $UI.Apps "Install VLC Media Player" "Media Players" "Installs the open-source VLC Media Player package via Winget." {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing." "Error"; return }
+    Write-Log "Installing VLC Media Player..." "Exec"
+    winget install VideoLAN.VLC --silent --accept-package-agreements --accept-source-agreements | ForEach-Object { if ($_.Trim() -ne "") { Write-Log $_ "Info" } }
+    Write-Log "VLC Media Player installed." "Success"
+}
+
+New-TweakCard $P_Apps $UI.Apps "Install Sumatra PDF" "Productivity" "Installs the lightweight Sumatra PDF reader package via Winget." {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing." "Error"; return }
+    Write-Log "Installing Sumatra PDF..." "Exec"
+    winget install SumatraPDF.SumatraPDF --silent --accept-package-agreements --accept-source-agreements | ForEach-Object { if ($_.Trim() -ne "") { Write-Log $_ "Info" } }
+    Write-Log "Sumatra PDF installed." "Success"
+}
+
 New-TweakCard $P_Apps $UI.Admin "Install PowerToys" "Essential Tools" "Installs Microsoft PowerToys for advanced system utilities and window management." {
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing." "Error"; return }
     Write-Log "Installing PowerToys..." "Exec"
@@ -1266,6 +1655,26 @@ New-TweakCard $P_Apps $UI.Admin "Install Sysinternals Suite" "SysAdmin Tools" "I
     Write-Log "Installing Sysinternals Suite..." "Exec"
     winget install Microsoft.SysinternalsSuite --silent --accept-package-agreements --accept-source-agreements | Out-Null
     Write-Log "Sysinternals Suite installed." "Success"
+}
+
+New-TweakCard $P_Apps $UI.Admin "Install Developer Bundle" "Winget Bundle" "Installs Git, VS Code, Windows Terminal, and PowerShell 7 in one batch." {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing." "Error"; return }
+    $devPkgs = @("Git.Git", "Microsoft.VisualStudioCode", "Microsoft.WindowsTerminal", "Microsoft.PowerShell")
+    foreach ($p in $devPkgs) {
+        Write-Log "Installing package: $p..." "Exec"
+        winget install $p --silent --accept-package-agreements --accept-source-agreements | Out-Null
+    }
+    Write-Log "Developer Essentials Bundle installed." "Success"
+}
+
+New-TweakCard $P_Apps $UI.Shield "Install SysAdmin Bundle" "Winget Bundle" "Installs Wireshark, Nmap, PuTTY, and System Informer in one batch." {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing." "Error"; return }
+    $adminPkgs = @("WiresharkFoundation.Wireshark", "Insecure.Nmap", "PuTTY.PuTTY", "Winsiderss.SystemInformer")
+    foreach ($p in $adminPkgs) {
+        Write-Log "Installing package: $p..." "Exec"
+        winget install $p --silent --accept-package-agreements --accept-source-agreements | Out-Null
+    }
+    Write-Log "SysAdmin Diagnostics Bundle installed." "Success"
 }
 
 # ------------------------------------------------------------------------------
@@ -1298,6 +1707,26 @@ New-TweakCard $P_Admin $UI.Privacy "Audit Local Administrators" "Security Audit"
     Write-Log "Local Administrator audit complete." "Success"
 }
 
+New-TweakCard $P_Admin $UI.Net "Audit Active SMB Shares" "Security Audit" "Audits all active network shared folders, admin shares, and paths." {
+    Write-Log "Auditing active SMB network shares..." "Exec"
+    Get-SmbShare | ForEach-Object {
+        Write-Log "Share '$($_.Name)' -> Path: $($_.Path) [Type: $($_.ShareType)]" "Info"
+    }
+    Write-Log "SMB Shares audit complete." "Success"
+}
+
+New-TweakCard $P_Admin $UI.Shield "Windows License Audit" "License Status" "Checks Windows digital licensing, product keys, and activation status." {
+    Write-Log "Verifying Windows licensing state..." "Exec"
+    $lic = Get-CimInstance SoftwareLicensingProduct | Where-Object { $_.PartialProductKey -and $_.ApplicationId -eq '55c92734-d682-4d71-983e-d6ec3f16059f' } | Select-Object -First 1
+    if ($lic) {
+        $st = switch ($lic.LicenseStatus) { 1 { "Licensed" } 2 { "OOB Grace" } 3 { "OOT Grace" } 4 { "Non-Genuine" } 5 { "Notification" } Default { "Unknown" } }
+        Write-Log "Product: $($lic.Name)" "Info"
+        Write-Log "License Status: $st (Key Channel: $($lic.Description))" "Success"
+    } else {
+        Write-Log "Unable to retrieve licensing details." "Warning"
+    }
+}
+
 New-TweakCard $P_Admin $UI.Net "Network Connections (NCPA)" "Quick Launcher" "Opens ncpa.cpl to manage network adapters." {
     Start-Process ncpa.cpl; Write-Log "Network Connections Control Panel opened." "Success"
 }
@@ -1308,6 +1737,22 @@ New-TweakCard $P_Admin $UI.Hardware "System Properties (SYSDM)" "Quick Launcher"
 
 New-TweakCard $P_Admin $UI.Hardware "Launch Device Manager" "Quick Launcher" "Opens devmgmt.msc directly." {
     Start-Process devmgmt.msc; Write-Log "Device Manager opened." "Success"
+}
+
+New-TweakCard $P_Admin $UI.Admin "Launch Services Console" "Quick Launcher" "Opens services.msc to inspect and configure Windows background services." {
+    Start-Process services.msc; Write-Log "Services Management Console opened." "Success"
+}
+
+New-TweakCard $P_Admin $UI.Admin "Launch Event Viewer" "Quick Launcher" "Opens eventvwr.msc to review system diagnostics and crash logs." {
+    Start-Process eventvwr.msc; Write-Log "Event Viewer opened." "Success"
+}
+
+New-TweakCard $P_Admin $UI.Admin "Launch Task Scheduler" "Quick Launcher" "Opens taskschd.msc to inspect automated Windows tasks and triggers." {
+    Start-Process taskschd.msc; Write-Log "Task Scheduler opened." "Success"
+}
+
+New-TweakCard $P_Admin $UI.Shield "Launch Advanced Firewall" "Quick Launcher" "Opens wf.msc to configure inbound and outbound network filtering rules." {
+    Start-Process wf.msc; Write-Log "Windows Defender Firewall with Advanced Security opened." "Success"
 }
 
 New-TweakCard $P_Admin $UI.Shield "Defender Quick Scan" "Antivirus" "Updates threat intelligence signatures and launches a Windows Defender scan." {
@@ -1367,5 +1812,5 @@ $Form.Add_FormClosing({
     if ($script:CpuCounter) { $script:CpuCounter.Dispose() }
 })
 
-Write-Log "AdminWorks Pro Suite v4.8 loaded and ready." "Success"
+Write-Log "AdminWorks Pro Suite v5.0 loaded and ready." "Success"
 [void]$Form.ShowDialog()
