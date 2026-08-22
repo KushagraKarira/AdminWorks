@@ -41,7 +41,6 @@ jobs:
             -description "Enterprise Windows Administration & Optimization Suite" `
             -company "Kushagra Karira" `
             -copyright "Copyright (c) 2026 Kushagra Karira" `
-            -originalFilename "AdminWorks.exe" `
             -version "5.0.0.0"
 
       - name: Upload EXE Artifacts
