@@ -42,6 +42,9 @@ public class NativeMethods {
 
     [DllImport("dwmapi.dll")]
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+    [DllImport("user32.dll")]
+    public static extern bool ShowScrollBar(IntPtr hWnd, int wBar, bool bShow);
 }
 "@
 }
@@ -193,7 +196,7 @@ $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
     ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 12, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false
 }
 $TitleSub = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "v5.3  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(42, 36); AutoSize = $true
+    Text        = "v5.3 $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(42, 36); AutoSize = $true
     ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
     Cursor      = [System.Windows.Forms.Cursors]::Hand; UseMnemonic = $false
 }
@@ -561,10 +564,8 @@ Enable-DoubleBuffering $ViewContainer
 function Update-ResponsiveLayout {
     if (-not $ViewContainer -or $ViewContainer.ClientSize.Width -le 100) { return }
 
-    # Accurately compute available interior width reserving space for vertical scrollbar
-    $sbWidth = [System.Windows.Forms.SystemInformation]::VerticalScrollBarWidth
-    if ($sbWidth -lt 18) { $sbWidth = 18 }
-    $availWidth = $ViewContainer.ClientSize.Width - 32 - $sbWidth - 4
+    # Available width strictly inside ViewContainer bounds (padding 16 left + 16 right)
+    $availWidth = $ViewContainer.ClientSize.Width - 32
     if ($availWidth -lt 280) { $availWidth = 280 }
 
     # Dynamically scale columns for large screens (1080p, 1440p, 4K, 5K, ultrawide)
@@ -572,7 +573,7 @@ function Update-ResponsiveLayout {
     $cols = [math]::Max(1, [math]::Floor($availWidth / 330))
     if ($cols -gt 16) { $cols = 16 }
 
-    # Calculate exact card width so all columns fit on one line with uniform margins
+    # Calculate exact card width so all columns fit on one line without horizontal overflow
     $targetWidth = [math]::Floor($availWidth / $cols) - 12
     if ($targetWidth -lt 280 -and $cols -gt 1) {
         $cols = [int]($cols - 1)
@@ -583,14 +584,23 @@ function Update-ResponsiveLayout {
     $activePanel = $script:CategoryPanels[$script:CurrentTabId]
     if ($activePanel) { 
         $activePanel.SuspendLayout() 
+
+        # Disable horizontal scroll
+        $activePanel.HorizontalScroll.Enabled = $false
+        $activePanel.HorizontalScroll.Visible = $false
+        $activePanel.HorizontalScroll.Maximum = 0
+
         foreach ($ctrl in $activePanel.Controls) {
             if ($ctrl -is [System.Windows.Forms.Panel] -and $ctrl.Tag -ne "Banner") {
                 if ($ctrl.Width -ne $targetWidth) { $ctrl.Width = $targetWidth }
-            } elseif ($ctrl.Tag -eq "Banner") {
-                $ctrl.Width = [math]::Max(400, $availWidth)
             }
         }
         $activePanel.ResumeLayout($true)
+
+        # Hide scrollbars completely while keeping vertical mouse-wheel scroll intact
+        try {
+            [NativeMethods]::ShowScrollBar($activePanel.Handle, 3, $false)
+        } catch {}
     }
 }
 $ViewContainer.Add_SizeChanged({ Update-ResponsiveLayout })
@@ -1000,7 +1010,7 @@ foreach ($tab in $TabList) {
     # Category Section Banner Header
     $Banner = New-Object System.Windows.Forms.FlowLayoutPanel -Property @{
         Height        = 34
-        Width         = 4000
+        AutoSize      = $true
         FlowDirection = "LeftToRight"
         WrapContents  = $false
         BackColor     = [System.Drawing.Color]::Transparent
@@ -1035,6 +1045,23 @@ foreach ($tab in $TabList) {
     $Flow.Controls.Add($Banner)
     $Flow.SetFlowBreak($Banner, $true)
     Enable-DoubleBuffering $Flow
+
+    # Strictly suppress horizontal scroll and hide visible scrollbar while maintaining vertical mouse-wheel scrolling
+    $Flow.HorizontalScroll.Enabled = $false
+    $Flow.HorizontalScroll.Visible = $false
+    $Flow.HorizontalScroll.Maximum = 0
+
+    $hideScrollBars = {
+        param($s, $e)
+        $s.HorizontalScroll.Enabled = $false
+        $s.HorizontalScroll.Visible = $false
+        $s.HorizontalScroll.Maximum = 0
+        try {
+            [NativeMethods]::ShowScrollBar($s.Handle, 3, $false)
+        } catch {}
+    }
+    $Flow.Add_Paint($hideScrollBars)
+    $Flow.Add_Layout($hideScrollBars)
 
     # Sidebar Item Panel
     $ItemPanel = New-Object System.Windows.Forms.Panel -Property @{
