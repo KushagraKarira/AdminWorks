@@ -12,51 +12,86 @@ permissions:
 
 jobs:
   build:
-    name: Build and Release Executables
+    name: Build and Release Executable
     runs-on: windows-latest
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Install PS2EXE Module
+      - name: Prepare PowerShell & Install PS2EXE
         shell: powershell
         run: |
-          Install-Module -Name ps2exe -Force -Scope CurrentUser -AcceptLicense
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted
+          Install-Module -Name ps2exe -Force -Scope CurrentUser -AcceptLicense -SkipPublisherCheck
 
-      - name: Compile AdminWorks.ps1
+      - name: Compile AdminWorks.ps1 to EXE
         shell: powershell
         run: |
-          Invoke-ps2exe `
-            -inputFile ".\AdminWorks.ps1" `
-            -outputFile ".\AdminWorks.exe" `
-            -noConsole `
-            -x64 `
-            -dpiAware `
-            -supportOS `
-            -requireAdmin `
-            -iconFile ".\app.ico" `
-            -title "AdminWorks Pro" `
-            -product "AdminWorks Enterprise Suite" `
-            -description "Enterprise Windows Administration & Optimization Suite" `
-            -company "Kushagra Karira" `
-            -copyright "Copyright (c) 2026 Kushagra Karira" `
-            -version "5.0.0.0"
+          $ver = "5.0.0.${{ github.run_number }}"
+          $ps2exeParams = @{
+              InputFile    = ".\AdminWorks.ps1"
+              OutputFile   = ".\AdminWorks.exe"
+              NoConsole    = $true
+              x64          = $true
+              DPIAware     = $true
+              SupportOS    = $true
+              RequireAdmin = $true
+              Title        = "AdminWorks Pro"
+              Product      = "AdminWorks Enterprise Suite"
+              Description  = "Enterprise Windows Administration & Optimization Suite"
+              Company      = "Kushagra Karira"
+              Copyright    = "Copyright (c) 2026 Kushagra Karira"
+              Version      = $ver
+          }
 
-      - name: Upload EXE Artifacts
-        uses: actions/upload-artifact@v5
-        with:
-          name: AdminWorks-Executables
-          path: .\AdminWorks.exe
-          retention-days: 7
+          # Only attach icon if file actually exists in the repository
+          if (Test-Path ".\app.ico") {
+              $ps2exeParams["IconFile"] = ".\app.ico"
+          }
 
-      # Automatically create a GitHub Release and attach the compiled EXE
-      - name: Auto Release EXEs
-        uses: softprops/action-gh-release@v3
+          # Execute compilation via splatting (avoids fragile backtick line continuations)
+          Invoke-PS2EXE @ps2exeParams
+
+          # Ensure binary was successfully generated
+          if (-not (Test-Path ".\AdminWorks.exe") -or (Get-Item ".\AdminWorks.exe").Length -lt 10000) {
+              throw "Compilation failed: AdminWorks.exe was not created or is corrupted."
+          }
+
+          # Generate SHA256 checksum for security verification
+          $hash = (Get-FileHash -Path ".\AdminWorks.exe" -Algorithm SHA256).Hash
+          "$hash  AdminWorks.exe" | Out-File -FilePath ".\AdminWorks.exe.sha256" -Encoding ascii
+          Write-Host "Build successful. SHA-256: $hash"
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: build-${{ github.run_number }}
-          name: AdminWorks Build ${{ github.run_number }}
-          body: "Automated build of the AdminWorks executable."
-          files: .\AdminWorks.exe
+          name: AdminWorks-Build-${{ github.run_number }}
+          path: |
+            .\AdminWorks.exe
+            .\AdminWorks.exe.sha256
+          retention-days: 14
+
+      # Automatically publish a GitHub Release and mark as latest
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v5.0.${{ github.run_number }}
+          name: AdminWorks Pro v5.0 (Build ${{ github.run_number }})
+          body: |
+            ### AdminWorks Enterprise Suite v5.0 (Build ${{ github.run_number }})
+            Automated production build of **AdminWorks Pro**.
+
+            - **Executable**: `AdminWorks.exe`
+            - **Architecture**: x64 (Native DPI-aware, Elevated)
+            - **Verification**: Check `AdminWorks.exe.sha256` for integrity
+          files: |
+            .\AdminWorks.exe
+            .\AdminWorks.exe.sha256
+          make_latest: true
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
