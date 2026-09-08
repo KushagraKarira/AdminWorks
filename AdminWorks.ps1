@@ -180,19 +180,19 @@ $Form.Controls.Add($Header)
 # 1. Left: Brand Container
 $BrandPanel = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Left"
-    Width     = 235
+    Width     = 240
     BackColor = $script:Theme.Header
 }
 $LogoIcon = New-Object System.Windows.Forms.Label -Property @{
-    Text        = $UI.Bolt; Location = New-Object System.Drawing.Point(16, 12); Size = New-Object System.Drawing.Size(26, 26)
+    Text        = $UI.Bolt; Location = New-Object System.Drawing.Point(14, 12); Size = New-Object System.Drawing.Size(26, 26)
     ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 13, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false
 }
 $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "ADMINWORKS"; Location = New-Object System.Drawing.Point(44, 12); AutoSize = $true
+    Text        = "ADMINWORKS"; Location = New-Object System.Drawing.Point(42, 12); AutoSize = $true
     ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 12, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false
 }
 $TitleSub = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "ENTERPRISE SUITE v5.0  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(46, 36); AutoSize = $true
+    Text        = "ENTERPRISE SUITE v5.0  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(42, 36); AutoSize = $true
     ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
     Cursor      = [System.Windows.Forms.Cursors]::Hand; UseMnemonic = $false
 }
@@ -306,6 +306,14 @@ $BrandPanel.BringToFront()
 $RightHeader.BringToFront()
 $CenterPanel.SendToBack()
 
+# Horizontal separator below Header
+$Header.Add_Paint({
+    param($s, $e)
+    $pen = New-Object System.Drawing.Pen($script:Theme.CardBorder, 1)
+    $e.Graphics.DrawLine($pen, 0, ($s.Height - 1), $s.Width, ($s.Height - 1))
+    $pen.Dispose()
+})
+
 # Dragging Support
 $dragHandler = {
     if ($_.Button -eq [System.Windows.Forms.MouseButtons]::Left) {
@@ -334,11 +342,20 @@ $SysBadge.Add_DoubleClick($doubleClickHandler)
 
 # --- [Sidebar Navigation Container] ---
 $Sidebar = New-Object System.Windows.Forms.Panel -Property @{
-    Dock      = "Left"
-    Width     = 235
-    BackColor = $script:Theme.Sidebar
+    Dock        = "Left"
+    Width       = 240
+    BackColor   = $script:Theme.Sidebar
+    AutoScroll  = $true
 }
 $Form.Controls.Add($Sidebar)
+
+# Vertical separator right of Sidebar
+$Sidebar.Add_Paint({
+    param($s, $e)
+    $pen = New-Object System.Drawing.Pen($script:Theme.CardBorder, 1)
+    $e.Graphics.DrawLine($pen, ($s.Width - 1), 0, ($s.Width - 1), $s.Height)
+    $pen.Dispose()
+})
 
 # --- [Bottom Console Drawer] ---
 $LogContainer = New-Object System.Windows.Forms.Panel -Property @{
@@ -375,7 +392,15 @@ $LogBox = New-Object System.Windows.Forms.RichTextBox -Property @{
     Font        = New-Object System.Drawing.Font("Consolas", 9)
 }
 $LogContainer.Controls.Add($LogBox)
-$LogBox.BringToFront()
+$LogBox.SendToBack()
+
+# Horizontal separator above Log Drawer
+$TermHeader.Add_Paint({
+    param($s, $e)
+    $pen = New-Object System.Drawing.Pen($script:Theme.CardBorder, 1)
+    $e.Graphics.DrawLine($pen, 0, 0, $s.Width, 0)
+    $pen.Dispose()
+})
 
 function New-TermBtn($Text, $Action) {
     $Btn = New-Object System.Windows.Forms.Button -Property @{
@@ -444,7 +469,7 @@ $MainArea = New-Object System.Windows.Forms.Panel -Property @{
     BackColor = $script:Theme.Bg
 }
 $Form.Controls.Add($MainArea)
-$MainArea.BringToFront()
+$MainArea.SendToBack()
 
 # Live Stats Bar
 $TelemetryBar = New-Object System.Windows.Forms.TableLayoutPanel -Property @{
@@ -453,7 +478,7 @@ $TelemetryBar = New-Object System.Windows.Forms.TableLayoutPanel -Property @{
     BackColor   = $script:Theme.SidebarActive
     ColumnCount = 4
     RowCount    = 1
-    Padding     = New-Object System.Windows.Forms.Padding(10, 5, 10, 5)
+    Padding     = New-Object System.Windows.Forms.Padding(16, 6, 16, 6)
 }
 [void]$TelemetryBar.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 25)))
 [void]$TelemetryBar.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 25)))
@@ -461,25 +486,40 @@ $TelemetryBar = New-Object System.Windows.Forms.TableLayoutPanel -Property @{
 [void]$TelemetryBar.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 25)))
 $MainArea.Controls.Add($TelemetryBar)
 
+# Horizontal separator below TelemetryBar
+$TelemetryBar.Add_Paint({
+    param($s, $e)
+    $pen = New-Object System.Drawing.Pen($script:Theme.CardBorder, 1)
+    $e.Graphics.DrawLine($pen, 0, ($s.Height - 1), $s.Width, ($s.Height - 1))
+    $pen.Dispose()
+})
+
 function New-StatWidget($IconGlyph, $Title) {
     $P = New-Object System.Windows.Forms.Panel -Property @{
         Dock      = "Fill"
         BackColor = $script:Theme.Card
-        Margin    = New-Object System.Windows.Forms.Padding(4)
+        Margin    = New-Object System.Windows.Forms.Padding(6, 4, 6, 4)
     }
+    $P.Add_Paint({
+        param($s, $e)
+        $pen = New-Object System.Drawing.Pen($script:Theme.CardBorder, 1)
+        $rect = New-Object System.Drawing.Rectangle(0, 0, ($s.Width - 1), ($s.Height - 1))
+        $e.Graphics.DrawRectangle($pen, $rect)
+        $pen.Dispose()
+    })
     $LIcon = New-Object System.Windows.Forms.Label -Property @{
-        Text        = $IconGlyph; Location = New-Object System.Drawing.Point(8, 7)
+        Text        = $IconGlyph; Location = New-Object System.Drawing.Point(10, 8)
         Size        = New-Object System.Drawing.Size(18, 16); ForeColor = $script:Theme.AccentGlow
         Font        = New-Object System.Drawing.Font($IconFont, 8.5)
         UseMnemonic = $false
     }
     $LTitle = New-Object System.Windows.Forms.Label -Property @{
-        Text        = $Title; Location = New-Object System.Drawing.Point(28, 7); AutoSize = $true
+        Text        = $Title; Location = New-Object System.Drawing.Point(32, 8); AutoSize = $true
         ForeColor   = $script:Theme.TextMuted; Font = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
         UseMnemonic = $false
     }
     $LVal = New-Object System.Windows.Forms.Label -Property @{
-        Text        = "--"; Location = New-Object System.Drawing.Point(28, 24); AutoSize = $true
+        Text        = "--"; Location = New-Object System.Drawing.Point(32, 24); AutoSize = $true
         ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 9, [System.Drawing.FontStyle]::Bold)
         UseMnemonic = $false
     }
@@ -512,27 +552,25 @@ $ViewContainer = New-Object System.Windows.Forms.Panel -Property @{
     BackColor = $script:Theme.Bg
 }
 $MainArea.Controls.Add($ViewContainer)
-$ViewContainer.BringToFront()
+$ViewContainer.SendToBack()
 Enable-DoubleBuffering $ViewContainer
 
 # --- [Dynamic Responsive Layout Function] ---
 function Update-ResponsiveLayout {
     if (-not $ViewContainer -or $ViewContainer.ClientSize.Width -le 100) { return }
 
-    $activePanel = $script:CategoryPanels[$script:CurrentTabId]
-    $availWidth = if ($activePanel -and $activePanel.ClientSize.Width -gt 100) {
-        $activePanel.ClientSize.Width - ($activePanel.Padding.Left + $activePanel.Padding.Right)
-    } else {
-        $ViewContainer.ClientSize.Width - 56
-    }
-    if ($availWidth -lt 260) { return }
+    # Accurately compute available interior width reserving space for vertical scrollbar
+    $sbWidth = [System.Windows.Forms.SystemInformation]::VerticalScrollBarWidth
+    if ($sbWidth -lt 18) { $sbWidth = 18 }
+    $availWidth = $ViewContainer.ClientSize.Width - 32 - $sbWidth - 4
+    if ($availWidth -lt 280) { $availWidth = 280 }
 
     # Dynamically scale columns for large screens (1080p, 1440p, 4K, 5K, ultrawide)
     # Target slot width around 320-350px per card (including 12px margins)
     $cols = [math]::Max(1, [math]::Floor($availWidth / 330))
     if ($cols -gt 16) { $cols = 16 }
 
-    # Calculate exact card width so all columns fit on one line without premature wrapping
+    # Calculate exact card width so all columns fit on one line with uniform margins
     $targetWidth = [math]::Floor($availWidth / $cols) - 12
     if ($targetWidth -lt 280 -and $cols -gt 1) {
         $cols = [int]($cols - 1)
@@ -540,7 +578,7 @@ function Update-ResponsiveLayout {
     }
     if ($targetWidth -lt 280) { $targetWidth = 280 }
 
-    # Batch layout update to prevent flickering and stuttering on high-resolution screens
+    $activePanel = $script:CategoryPanels[$script:CurrentTabId]
     if ($activePanel) { $activePanel.SuspendLayout() }
 
     foreach ($card in $script:AllCards) {
@@ -549,7 +587,7 @@ function Update-ResponsiveLayout {
         }
     }
 
-    # Update category banner headers to span full width
+    # Update category banner headers to span full width with uniform alignment
     foreach ($p in $script:CategoryPanels.Values) {
         if ($p) {
             foreach ($ctrl in $p.Controls) {
@@ -566,14 +604,14 @@ $ViewContainer.Add_SizeChanged({ Update-ResponsiveLayout })
 
 function New-TweakCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc, $Action) {
     $P = New-Object System.Windows.Forms.Panel -Property @{
-        Size      = New-Object System.Drawing.Size(320, 146)
+        Size      = New-Object System.Drawing.Size(320, 154)
         BackColor = $script:Theme.Card
         Margin    = New-Object System.Windows.Forms.Padding(6)
     }
 
     $TagLbl = New-Object System.Windows.Forms.Label -Property @{
         Text        = $CategoryTag.ToUpper()
-        Location    = New-Object System.Drawing.Point(12, 8); AutoSize = $true
+        Location    = New-Object System.Drawing.Point(14, 10); AutoSize = $true
         ForeColor   = $script:Theme.AccentGlow
         Font        = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
         UseMnemonic = $false
@@ -581,7 +619,7 @@ function New-TweakCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc,
 
     $IconLbl = New-Object System.Windows.Forms.Label -Property @{
         Text        = $IconGlyph
-        Location    = New-Object System.Drawing.Point(10, 26); Size = New-Object System.Drawing.Size(20, 20)
+        Location    = New-Object System.Drawing.Point(14, 28); Size = New-Object System.Drawing.Size(20, 20)
         ForeColor   = $script:Theme.AccentGlow
         Font        = New-Object System.Drawing.Font($IconFont, 9.5)
         UseMnemonic = $false
@@ -589,8 +627,8 @@ function New-TweakCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc,
 
     $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
         Text         = $Title
-        Location     = New-Object System.Drawing.Point(32, 26)
-        Size         = New-Object System.Drawing.Size(270, 20)
+        Location     = New-Object System.Drawing.Point(38, 28)
+        Size         = New-Object System.Drawing.Size(268, 20)
         Anchor       = [System.Windows.Forms.AnchorStyles]"Top, Left, Right"
         ForeColor    = $script:Theme.TextMain
         Font         = New-Object System.Drawing.Font($GlobalFont, 9, [System.Drawing.FontStyle]::Bold)
@@ -600,8 +638,8 @@ function New-TweakCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc,
 
     $DescLbl = New-Object System.Windows.Forms.Label -Property @{
         Text         = $Desc
-        Location     = New-Object System.Drawing.Point(12, 50)
-        Size         = New-Object System.Drawing.Size(294, 48)
+        Location     = New-Object System.Drawing.Point(14, 52)
+        Size         = New-Object System.Drawing.Size(292, 52)
         Anchor       = [System.Windows.Forms.AnchorStyles]"Top, Left, Right"
         ForeColor    = $script:Theme.TextMuted
         Font         = New-Object System.Drawing.Font($GlobalFont, 8)
@@ -609,15 +647,34 @@ function New-TweakCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc,
         UseMnemonic  = $false
     }
 
-    $P.Add_MouseEnter({ $this.BackColor = $script:Theme.CardHover })
-    $P.Add_MouseLeave({ $this.BackColor = $script:Theme.Card })
+    # Crisp uniform card border with hover glow
+    $P.Add_Paint({
+        param($s, $e)
+        $borderColor = if ($s.Tag -and $s.Tag.IsHovered) { $script:Theme.AccentGlow } else { $script:Theme.CardBorder }
+        $rect = New-Object System.Drawing.Rectangle(0, 0, ($s.Width - 1), ($s.Height - 1))
+        $pen = New-Object System.Drawing.Pen($borderColor, 1)
+        $e.Graphics.DrawRectangle($pen, $rect)
+        $pen.Dispose()
+    })
+
+    $P.Add_MouseEnter({ 
+        $this.BackColor = $script:Theme.CardHover
+        if (-not $this.Tag -or $this.Tag -isnot [hashtable]) { $this.Tag = @{} }
+        $this.Tag.IsHovered = $true
+        $this.Invalidate()
+    })
+    $P.Add_MouseLeave({ 
+        $this.BackColor = $script:Theme.Card
+        if ($this.Tag -and $this.Tag -is [hashtable]) { $this.Tag.IsHovered = $false }
+        $this.Invalidate()
+    })
 
     $ActionString = $Action.ToString()
 
     $Btn = New-Object System.Windows.Forms.Button -Property @{
         Text        = "APPLY"
-        Size        = New-Object System.Drawing.Size(92, 26)
-        Location    = New-Object System.Drawing.Point(216, 110)
+        Size        = New-Object System.Drawing.Size(92, 28)
+        Location    = New-Object System.Drawing.Point(214, 114)
         Anchor      = [System.Windows.Forms.AnchorStyles]"Bottom, Right"
         FlatStyle   = "Flat"
         BackColor   = $script:Theme.SidebarActive
@@ -726,14 +783,14 @@ function Update-ToggleStateVisual ($B, $Active) {
 
 function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc, $CheckAction, $EnableAction, $DisableAction) {
     $P = New-Object System.Windows.Forms.Panel -Property @{
-        Size      = New-Object System.Drawing.Size(320, 146)
+        Size      = New-Object System.Drawing.Size(320, 154)
         BackColor = $script:Theme.Card
         Margin    = New-Object System.Windows.Forms.Padding(6)
     }
 
     $TagLbl = New-Object System.Windows.Forms.Label -Property @{
         Text        = "$($CategoryTag.ToUpper())  $($UI.Bullet)  TOGGLE"
-        Location    = New-Object System.Drawing.Point(12, 8); AutoSize = $true
+        Location    = New-Object System.Drawing.Point(14, 10); AutoSize = $true
         ForeColor   = $script:Theme.AccentGlow
         Font        = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
         UseMnemonic = $false
@@ -741,7 +798,7 @@ function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc
 
     $IconLbl = New-Object System.Windows.Forms.Label -Property @{
         Text        = $IconGlyph
-        Location    = New-Object System.Drawing.Point(10, 26); Size = New-Object System.Drawing.Size(20, 20)
+        Location    = New-Object System.Drawing.Point(14, 28); Size = New-Object System.Drawing.Size(20, 20)
         ForeColor   = $script:Theme.AccentGlow
         Font        = New-Object System.Drawing.Font($IconFont, 9.5)
         UseMnemonic = $false
@@ -749,8 +806,8 @@ function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc
 
     $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
         Text         = $Title
-        Location     = New-Object System.Drawing.Point(32, 26)
-        Size         = New-Object System.Drawing.Size(270, 20)
+        Location     = New-Object System.Drawing.Point(38, 28)
+        Size         = New-Object System.Drawing.Size(268, 20)
         Anchor       = [System.Windows.Forms.AnchorStyles]"Top, Left, Right"
         ForeColor    = $script:Theme.TextMain
         Font         = New-Object System.Drawing.Font($GlobalFont, 9, [System.Drawing.FontStyle]::Bold)
@@ -760,8 +817,8 @@ function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc
 
     $DescLbl = New-Object System.Windows.Forms.Label -Property @{
         Text         = $Desc
-        Location     = New-Object System.Drawing.Point(12, 50)
-        Size         = New-Object System.Drawing.Size(294, 48)
+        Location     = New-Object System.Drawing.Point(14, 52)
+        Size         = New-Object System.Drawing.Size(292, 52)
         Anchor       = [System.Windows.Forms.AnchorStyles]"Top, Left, Right"
         ForeColor    = $script:Theme.TextMuted
         Font         = New-Object System.Drawing.Font($GlobalFont, 8)
@@ -769,13 +826,32 @@ function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc
         UseMnemonic  = $false
     }
 
-    $P.Add_MouseEnter({ $this.BackColor = $script:Theme.CardHover })
-    $P.Add_MouseLeave({ $this.BackColor = $script:Theme.Card })
+    # Crisp uniform card border with hover glow
+    $P.Add_Paint({
+        param($s, $e)
+        $borderColor = if ($s.Tag -and $s.Tag.IsHovered) { $script:Theme.AccentGlow } else { $script:Theme.CardBorder }
+        $rect = New-Object System.Drawing.Rectangle(0, 0, ($s.Width - 1), ($s.Height - 1))
+        $pen = New-Object System.Drawing.Pen($borderColor, 1)
+        $e.Graphics.DrawRectangle($pen, $rect)
+        $pen.Dispose()
+    })
+
+    $P.Add_MouseEnter({ 
+        $this.BackColor = $script:Theme.CardHover
+        if (-not $this.Tag -or $this.Tag -isnot [hashtable]) { $this.Tag = @{} }
+        $this.Tag.IsHovered = $true
+        $this.Invalidate()
+    })
+    $P.Add_MouseLeave({ 
+        $this.BackColor = $script:Theme.Card
+        if ($this.Tag -and $this.Tag -is [hashtable]) { $this.Tag.IsHovered = $false }
+        $this.Invalidate()
+    })
 
     $Btn = New-Object System.Windows.Forms.Button -Property @{
         Text        = "CHECKING..."
-        Size        = New-Object System.Drawing.Size(100, 26)
-        Location    = New-Object System.Drawing.Point(208, 110)
+        Size        = New-Object System.Drawing.Size(110, 28)
+        Location    = New-Object System.Drawing.Point(196, 114)
         Anchor      = [System.Windows.Forms.AnchorStyles]"Bottom, Right"
         FlatStyle   = "Flat"
         BackColor   = $script:Theme.SidebarActive
@@ -950,7 +1026,7 @@ foreach ($tab in $TabList) {
         FlowDirection = "LeftToRight"
         WrapContents  = $false
         BackColor     = [System.Drawing.Color]::Transparent
-        Margin        = New-Object System.Windows.Forms.Padding(4, 2, 4, 8)
+        Margin        = New-Object System.Windows.Forms.Padding(6, 4, 6, 12)
         Tag           = "Banner"
     }
     $BannerIcon = New-Object System.Windows.Forms.Label -Property @{
@@ -985,7 +1061,7 @@ foreach ($tab in $TabList) {
     # Sidebar Item Panel
     $ItemPanel = New-Object System.Windows.Forms.Panel -Property @{
         Location  = New-Object System.Drawing.Point(0, $BtnY)
-        Size      = New-Object System.Drawing.Size(235, 40)
+        Size      = New-Object System.Drawing.Size(240, 40)
         BackColor = $script:Theme.Sidebar
         Cursor    = [System.Windows.Forms.Cursors]::Hand
         Tag       = $tab.Id
@@ -1049,13 +1125,24 @@ $SearchBox.Add_TextChanged({
     $isSearching = ($Query -ne $SearchPlaceholder.ToLower() -and -not [string]::IsNullOrWhiteSpace($Query))
 
     if (-not $isSearching) {
+        # Restore all cards and active tab view
         foreach ($card in $script:AllCards) { $card.Panel.Visible = $true }
         foreach ($k in $script:CategoryPanels.Keys) { 
             $script:CategoryPanels[$k].Visible = ($k -eq $script:CurrentTabId) 
         }
+        foreach ($item in $script:SidebarItems.Values) {
+            if ($item.Panel.Tag -ne $script:CurrentTabId) {
+                $item.Icon.ForeColor = $script:Theme.TextMuted
+                $item.Text.ForeColor = $script:Theme.TextMuted
+            }
+        }
         Update-ResponsiveLayout
         return
     }
+
+    # Filter cards across all categories
+    $firstMatchTab = $null
+    $tabMatchCounts = @{}
 
     foreach ($card in $script:AllCards) {
         $Match = ($card.Title.ToLower() -like "*$Query*") -or 
@@ -1063,10 +1150,52 @@ $SearchBox.Add_TextChanged({
                  ($card.Category.ToLower() -like "*$Query*")
         $card.Panel.Visible = $Match
     }
+
+    # Evaluate match counts per category
     foreach ($k in $script:CategoryPanels.Keys) {
-        $hasVisible = ($script:CategoryPanels[$k].Controls | Where-Object { $_ -is [System.Windows.Forms.Panel] -and $_.Visible -and $_.Tag -ne "Banner" }).Count -gt 0
-        $script:CategoryPanels[$k].Visible = $hasVisible
+        $count = ($script:CategoryPanels[$k].Controls | Where-Object { $_ -is [System.Windows.Forms.Panel] -and $_.Visible -and $_.Tag -ne "Banner" }).Count
+        $tabMatchCounts[$k] = $count
+        if ($count -gt 0 -and -not $firstMatchTab) {
+            $firstMatchTab = $k
+        }
     }
+
+    # Update sidebar indicators: highlight tabs with matches
+    foreach ($k in $script:SidebarItems.Keys) {
+        $item = $script:SidebarItems[$k]
+        if ($tabMatchCounts[$k] -gt 0) {
+            $item.Icon.ForeColor = $script:Theme.AccentGlow
+            $item.Text.ForeColor = [System.Drawing.Color]::White
+        } else {
+            $item.Icon.ForeColor = $script:Theme.TextSubtle
+            $item.Text.ForeColor = $script:Theme.TextSubtle
+        }
+    }
+
+    # Determine which tab to display: stay on current if it has matches; otherwise switch to first matching tab
+    $targetTab = $script:CurrentTabId
+    if ($tabMatchCounts[$script:CurrentTabId] -eq 0 -and $firstMatchTab) {
+        $targetTab = $firstMatchTab
+        $script:CurrentTabId = $targetTab
+    }
+
+    # ENSURE ONLY ONE CATEGORY PANEL IS EVER VISIBLE (never stack multiple Dock=Fill panels)
+    foreach ($k in $script:CategoryPanels.Keys) {
+        $script:CategoryPanels[$k].Visible = ($k -eq $targetTab)
+    }
+
+    # Update active tab styling in sidebar
+    foreach ($k in $script:SidebarItems.Keys) {
+        $item = $script:SidebarItems[$k]
+        if ($k -eq $targetTab) {
+            $item.Panel.BackColor = $script:Theme.SidebarActive
+            $item.Indicator.BackColor = $script:Theme.Accent
+        } else {
+            $item.Panel.BackColor = $script:Theme.Sidebar
+            $item.Indicator.BackColor = [System.Drawing.Color]::Transparent
+        }
+    }
+
     Update-ResponsiveLayout
 })
 
