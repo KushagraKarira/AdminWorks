@@ -15,6 +15,7 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # --- [OS Version Detection Helper] ---
+$script:AppVersion = "5.3"
 $script:OSBuild = [Environment]::OSVersion.Version.Build
 $script:IsWin11 = ($script:OSBuild -ge 22000)
 $script:IsWin10 = ($script:OSBuild -ge 10240 -and $script:OSBuild -lt 22000)
@@ -44,7 +45,7 @@ public class NativeMethods {
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
     [DllImport("user32.dll")]
-    public static extern bool ShowScrollBar(IntPtr hWnd, int wBar, bool bShow);
+    public static extern void ShowScrollBar(IntPtr hWnd, int wBar, bool bShow);
 }
 "@
 }
@@ -480,7 +481,7 @@ New-TermBtn "CLEAR" { $LogBox.Clear(); Write-Log "Console cleared." "Info" }
 
 function Write-Log ($Msg, $Type = "Info") {
     if ([string]::IsNullOrWhiteSpace($Msg)) { return }
-    $LogBox.Invoke([Action[string, string]]{
+    [void]$LogBox.Invoke([Action[string, string]]{
         param($m, $t)
         $LogBox.SelectionStart = $LogBox.TextLength
         $LogBox.SelectionColor = switch ($t) {
@@ -639,7 +640,7 @@ function Update-ResponsiveLayout {
 
         # Hide scrollbars completely while keeping vertical mouse-wheel scroll intact
         try {
-            [NativeMethods]::ShowScrollBar($activePanel.Handle, 3, $false)
+            [void][NativeMethods]::ShowScrollBar($activePanel.Handle, 3, $false)
         } catch {}
     }
 }
@@ -664,7 +665,7 @@ function Invoke-AdminWorksAction ($ActionCode, $Button, [scriptblock]$OnComplete
         
         function Write-Log ($Msg, $Type = "Info") {
             if ([string]::IsNullOrWhiteSpace($Msg)) { return }
-            $LogBox.Invoke([Action[string, string]]{
+            [void]$LogBox.Invoke([Action[string, string]]{
                 param($m, $t)
                 $LogBox.SelectionStart = $LogBox.TextLength
                 $LogBox.SelectionColor = switch ($t) {
@@ -1003,7 +1004,7 @@ foreach ($tab in $TabList) {
         $s.HorizontalScroll.Visible = $false
         $s.HorizontalScroll.Maximum = 0
         try {
-            [NativeMethods]::ShowScrollBar($s.Handle, 3, $false)
+            [void][NativeMethods]::ShowScrollBar($s.Handle, 3, $false)
         } catch {}
     }
     $Flow.Add_Paint($hideScrollBars)
@@ -2254,5 +2255,5 @@ $Form.Add_Shown({
     Update-ResponsiveLayout
 })
 
-Write-Log "AdminWorks Pro Suite v5.0 loaded and ready." "Success"
+Write-Log "AdminWorks Pro Suite v$($script:AppVersion) loaded and ready." "Success"
 [void]$Form.ShowDialog()
