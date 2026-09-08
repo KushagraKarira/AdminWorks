@@ -34,7 +34,7 @@ jobs:
           $scriptContent = Get-Content ".\AdminWorks.ps1" -Raw
           $baseVer = "5.3"
           if ($scriptContent -match 'v(\d+\.\d+)') {
-              $baseVer = $matches
+          $baseVer = $matches[1]
           }
 
           $buildNum = "${{ github.run_number }}"
