@@ -1814,18 +1814,19 @@ New-TweakCard $P_Apps $UI.Refresh "Update AdminWorks (AdminWorks.exe)" "Software
     }
 
     $currentProc = Get-Process -Id $PID -ErrorAction SilentlyContinue
-    $isExe = ($currentProc -and ($currentProc.ProcessName -ieq "AdminWorks"))
+    # Robustly detect if running as a compiled exe by ensuring the host isn't standard PowerShell
+    $isExe = ($currentProc.MainModule.FileName -match "\.exe$" -and $currentProc.ProcessName -notmatch "^(powershell|pwsh|powershell_ise)$")
     $targetDir = [Environment]::GetFolderPath("Desktop")
-    $targetExe = Join-Path $targetDir "AdminWorks.exe"
-
+    
     if ($isExe -and $currentProc.MainModule.FileName) {
         $targetExe = $currentProc.MainModule.FileName
         $targetDir = Split-Path -Parent $targetExe
-    } elseif ($PSScriptRoot -and (Test-Path $PSScriptRoot)) {
-        $targetExe = Join-Path $PSScriptRoot "AdminWorks.exe"
+    } else {
+        # Fallback for raw .ps1 execution since $PSScriptRoot is null in this runspace
+        $targetExe = Join-Path $targetDir "AdminWorks.exe"
     }
 
-    $tempExe = Join-Path $env:TEMP "AdminWorks_update.exe"
+    $tempExe = Join-Path $env:TEMP "AdminWorks_update_$($PID).exe"
     if (Test-Path $tempExe) { Remove-Item $tempExe -Force -ErrorAction SilentlyContinue }
 
     Write-Log "Downloading latest AdminWorks.exe from release page..." "Warning"
@@ -1852,12 +1853,12 @@ New-TweakCard $P_Apps $UI.Refresh "Update AdminWorks (AdminWorks.exe)" "Software
         $batchLines = @(
             '@echo off',
             'timeout /t 2 /nobreak >nul',
-            'taskkill /f /im AdminWorks.exe >nul 2>&1',
+            "taskkill /f /pid $($currentProc.Id) >nul 2>&1",  # Target exact PID regardless of file name
             "move /y `"$tempExe`" `"$targetExe`" >nul",
             "start `"`" `"$targetExe`"",
-            'del "%~f0"'
+            '(goto) 2>nul & del "%~f0"'                      # Safer self-deletion syntax
         )
-        $batchFile = Join-Path $env:TEMP "update_adminworks.bat"
+        $batchFile = Join-Path $env:TEMP "update_adminworks_$($PID).bat"
         $batchLines | Set-Content -Path $batchFile -Force
         Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$batchFile`"" -WindowStyle Hidden
         Write-Log "Update scheduled. AdminWorks will restart momentarily." "Success"
