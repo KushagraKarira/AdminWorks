@@ -645,15 +645,91 @@ function Update-ResponsiveLayout {
 }
 $ViewContainer.Add_SizeChanged({ Update-ResponsiveLayout })
 
-function New-TweakCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc, $Action) {
+# --- [Centralized Async Action Execution Engine] ---
+function Invoke-AdminWorksAction ($ActionCode, $Button, [scriptblock]$OnComplete) {
+    $Button.Enabled = $false
+    $Button.Text = "RUNNING..."
+    $Button.BackColor = $script:Theme.Warning
+    $Button.ForeColor = [System.Drawing.Color]::Black
+
+    # Auto-expand console drawer to show live execution
+    if ($LogContainer.Height -le 40) {
+        $LogContainer.Height = 180
+        $BtnToggleDrawer.Text = "COLLAPSE"
+    }
+
+    $PS = [powershell]::Create().AddScript({
+        param($CodeStr, $LogBox, $Theme, $BackupDir)
+        $global:BackupDir = $BackupDir
+        
+        function Write-Log ($Msg, $Type = "Info") {
+            if ([string]::IsNullOrWhiteSpace($Msg)) { return }
+            $LogBox.Invoke([Action[string, string]]{
+                param($m, $t)
+                $LogBox.SelectionStart = $LogBox.TextLength
+                $LogBox.SelectionColor = switch ($t) {
+                    "Success" { $Theme.Success }
+                    "Warning" { $Theme.Warning }
+                    "Error"   { $Theme.Danger }
+                    "Exec"    { $Theme.AccentGlow }
+                    Default   { $Theme.TextMuted }
+                }
+                $LogBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [$($t.ToUpper().PadRight(7))] $m`n")
+                $LogBox.ScrollToCaret()
+            }, $Msg, $Type)
+        }
+
+        try {
+            $Exec = [scriptblock]::Create($CodeStr)
+            & $Exec
+        } catch {
+            Write-Log "Execution Error: $($_.Exception.Message)" "Error"
+        }
+    }).AddArgument($ActionCode).AddArgument($LogBox).AddArgument($script:Theme).AddArgument($script:BackupDir)
+
+    $Runspace = [runspacefactory]::CreateRunspace()
+    $Runspace.ThreadOptions = "ReuseThread"
+    $Runspace.Open()
+    $PS.Runspace = $Runspace
+
+    $null = $PS.BeginInvoke()
+
+    $Timer = New-Object System.Windows.Forms.Timer -Property @{Interval = 300}
+    $Timer.Tag = @{ Button = $Button; PS = $PS; Runspace = $Runspace; OnComplete = $OnComplete }
+    $Timer.Add_Tick({
+        $State = $this.Tag
+        if ($State.PS.InvocationStateInfo.State -ne "Running") {
+            $State.Button.Enabled = $true
+            if ($State.OnComplete) {
+                & $State.OnComplete $State.Button
+            } else {
+                $State.Button.Text = "DONE"
+                $State.Button.BackColor = $script:Theme.Success
+                $State.Button.ForeColor = [System.Drawing.Color]::White
+            }
+
+            $State.PS.Dispose()
+            $State.Runspace.Close()
+            $State.Runspace.Dispose()
+
+            $this.Stop()
+            $this.Dispose()
+        }
+    })
+    $Timer.Start()
+}
+
+# --- [Card Layout Factory Helper] ---
+function New-BaseCardPanel ($CategoryPanel, $CategoryTag, $IconGlyph, $Title, $Desc, $IsToggle) {
     $P = New-Object System.Windows.Forms.Panel -Property @{
         Size      = New-Object System.Drawing.Size(320, 154)
         BackColor = $script:Theme.Card
         Margin    = New-Object System.Windows.Forms.Padding(6)
     }
 
+    $tagText = if ($IsToggle) { "$($CategoryTag.ToUpper())  $($UI.Bullet)  TOGGLE" } else { $CategoryTag.ToUpper() }
     $TagLbl = New-Object System.Windows.Forms.Label -Property @{
-        Text        = $CategoryTag.ToUpper()
+        Text        = $tagText
         Location    = New-Object System.Drawing.Point(14, 10); AutoSize = $true
         ForeColor   = $script:Theme.AccentGlow
         Font        = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
@@ -713,6 +789,13 @@ function New-TweakCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc,
         $this.Invalidate()
     })
 
+    $P.Controls.AddRange(@($TagLbl, $IconLbl, $TitleLbl, $DescLbl))
+    return $P
+}
+
+function New-TweakCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc, $Action) {
+    $P = New-BaseCardPanel $CategoryPanel $CategoryTag $IconGlyph $Title $Desc $false
+
     $ActionString = $Action.ToString()
 
     $Btn = New-Object System.Windows.Forms.Button -Property @{
@@ -733,79 +816,15 @@ function New-TweakCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc,
     $Btn.Add_MouseLeave({ if ($this.Enabled) { $this.BackColor = $script:Theme.SidebarActive; $this.ForeColor = $script:Theme.TextMain } })
 
     $Btn.Add_Click({
-        $B = $this
-        $ActionCode = $B.Tag
-
-        $B.Enabled = $false
-        $B.Text = "RUNNING..."
-        $B.BackColor = $script:Theme.Warning
-        $B.ForeColor = [System.Drawing.Color]::Black
-
-        # Auto-expand console drawer to show live execution
-        if ($LogContainer.Height -le 40) {
-            $LogContainer.Height = 180
-            $BtnToggleDrawer.Text = "COLLAPSE"
+        Invoke-AdminWorksAction $this.Tag $this {
+            param($b)
+            $b.Text = "DONE"
+            $b.BackColor = $script:Theme.Success
+            $b.ForeColor = [System.Drawing.Color]::White
         }
-
-        $PS = [powershell]::Create().AddScript({
-            param($CodeStr, $LogBox, $Theme, $BackupDir)
-            $global:BackupDir = $BackupDir
-            
-            function Write-Log ($Msg, $Type = "Info") {
-                if ([string]::IsNullOrWhiteSpace($Msg)) { return }
-                $LogBox.Invoke([Action[string, string]]{
-                    param($m, $t)
-                    $LogBox.SelectionStart = $LogBox.TextLength
-                    $LogBox.SelectionColor = switch ($t) {
-                        "Success" { $Theme.Success }
-                        "Warning" { $Theme.Warning }
-                        "Error"   { $Theme.Danger }
-                        "Exec"    { $Theme.AccentGlow }
-                        Default   { $Theme.TextMuted }
-                    }
-                    $LogBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [$($t.ToUpper().PadRight(7))] $m`n")
-                    $LogBox.ScrollToCaret()
-                }, $Msg, $Type)
-            }
-
-            try {
-                $Exec = [scriptblock]::Create($CodeStr)
-                & $Exec
-            } catch {
-                Write-Log "Execution Error: $($_.Exception.Message)" "Error"
-            }
-        }).AddArgument($ActionCode).AddArgument($LogBox).AddArgument($script:Theme).AddArgument($script:BackupDir)
-
-        $Runspace = [runspacefactory]::CreateRunspace()
-        $Runspace.ThreadOptions = "ReuseThread"
-        $Runspace.Open()
-        $PS.Runspace = $Runspace
-
-        $null = $PS.BeginInvoke()
-
-        $Timer = New-Object System.Windows.Forms.Timer
-        $Timer.Interval = 350
-        $Timer.Tag = @{ Button = $B; PS = $PS; Runspace = $Runspace }
-        $Timer.Add_Tick({
-            $State = $this.Tag
-            if ($State.PS.InvocationStateInfo.State -ne "Running") {
-                $State.Button.Enabled = $true
-                $State.Button.Text = "DONE"
-                $State.Button.BackColor = $script:Theme.Success
-                $State.Button.ForeColor = [System.Drawing.Color]::White
-
-                $State.PS.Dispose()
-                $State.Runspace.Close()
-                $State.Runspace.Dispose()
-
-                $this.Stop()
-                $this.Dispose()
-            }
-        })
-        $Timer.Start()
     })
 
-    $P.Controls.AddRange(@($TagLbl, $IconLbl, $TitleLbl, $DescLbl, $Btn))
+    $P.Controls.Add($Btn)
     $CategoryPanel.Controls.Add($P)
 
     $script:AllCards.Add([PSCustomObject]@{
@@ -832,72 +851,7 @@ function Update-ToggleStateVisual ($B, $Active) {
 }
 
 function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc, $CheckAction, $EnableAction, $DisableAction) {
-    $P = New-Object System.Windows.Forms.Panel -Property @{
-        Size      = New-Object System.Drawing.Size(320, 154)
-        BackColor = $script:Theme.Card
-        Margin    = New-Object System.Windows.Forms.Padding(6)
-    }
-
-    $TagLbl = New-Object System.Windows.Forms.Label -Property @{
-        Text        = "$($CategoryTag.ToUpper())  $($UI.Bullet)  TOGGLE"
-        Location    = New-Object System.Drawing.Point(14, 10); AutoSize = $true
-        ForeColor   = $script:Theme.AccentGlow
-        Font        = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
-        UseMnemonic = $false
-    }
-
-    $IconLbl = New-Object System.Windows.Forms.Label -Property @{
-        Text        = $IconGlyph
-        Location    = New-Object System.Drawing.Point(14, 28); Size = New-Object System.Drawing.Size(20, 20)
-        ForeColor   = $script:Theme.AccentGlow
-        Font        = New-Object System.Drawing.Font($IconFont, 9.5)
-        UseMnemonic = $false
-    }
-
-    $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
-        Text         = $Title
-        Location     = New-Object System.Drawing.Point(38, 28)
-        Size         = New-Object System.Drawing.Size(268, 20)
-        Anchor       = [System.Windows.Forms.AnchorStyles]"Top, Left, Right"
-        ForeColor    = $script:Theme.TextMain
-        Font         = New-Object System.Drawing.Font($GlobalFont, 9, [System.Drawing.FontStyle]::Bold)
-        AutoEllipsis = $true
-        UseMnemonic  = $false
-    }
-
-    $DescLbl = New-Object System.Windows.Forms.Label -Property @{
-        Text         = $Desc
-        Location     = New-Object System.Drawing.Point(14, 52)
-        Size         = New-Object System.Drawing.Size(292, 52)
-        Anchor       = [System.Windows.Forms.AnchorStyles]"Top, Left, Right"
-        ForeColor    = $script:Theme.TextMuted
-        Font         = New-Object System.Drawing.Font($GlobalFont, 8)
-        AutoEllipsis = $true
-        UseMnemonic  = $false
-    }
-
-    # Crisp uniform card border with hover glow
-    $P.Add_Paint({
-        param($s, $e)
-        $borderColor = if ($s.Tag -and $s.Tag.IsHovered) { $script:Theme.AccentGlow } else { $script:Theme.CardBorder }
-        $rect = New-Object System.Drawing.Rectangle(0, 0, ($s.Width - 1), ($s.Height - 1))
-        $pen = New-Object System.Drawing.Pen($borderColor, 1)
-        $e.Graphics.DrawRectangle($pen, $rect)
-        $pen.Dispose()
-    })
-
-    $P.Add_MouseEnter({ 
-        $this.BackColor = $script:Theme.CardHover
-        if (-not $this.Tag -or $this.Tag -isnot [hashtable]) { $this.Tag = @{} }
-        $this.Tag.IsHovered = $true
-        $this.Invalidate()
-        if ($CategoryPanel -and $CategoryPanel.CanFocus) { $CategoryPanel.Focus() }
-    })
-    $P.Add_MouseLeave({ 
-        $this.BackColor = $script:Theme.Card
-        if ($this.Tag -and $this.Tag -is [hashtable]) { $this.Tag = @{} }
-        $this.Invalidate()
-    })
+    $P = New-BaseCardPanel $CategoryPanel $CategoryTag $IconGlyph $Title $Desc $true
 
     $Btn = New-Object System.Windows.Forms.Button -Property @{
         Text        = "TOGGLE"
@@ -919,79 +873,22 @@ function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc
         DisableCode   = $DisableAction.ToString()
         IsActive      = $false
     }
-
     $Btn.Tag = $ToggleMeta
 
-    # Instant clean toggle action without any blocking system state probing
     $Btn.Add_Click({
         $B = $this
         $Meta = $B.Tag
         $TargetActive = -not $Meta.IsActive
         $TargetCode = if ($TargetActive) { $Meta.EnableCode } else { $Meta.DisableCode }
-        $TargetLabel = if ($TargetActive) { "ENABLING..." } else { "DISABLING..." }
+        $B.Text = if ($TargetActive) { "ENABLING..." } else { "DISABLING..." }
 
-        $B.Enabled = $false
-        $B.Text = $TargetLabel
-        $B.BackColor = $script:Theme.Warning
-        $B.ForeColor = [System.Drawing.Color]::Black
-
-        $PS = [powershell]::Create().AddScript({
-            param($CodeStr, $LogBox, $Theme, $BackupDir)
-            $global:BackupDir = $BackupDir
-            
-            function Write-Log ($Msg, $Type = "Info") {
-                if ([string]::IsNullOrWhiteSpace($Msg)) { return }
-                $LogBox.Invoke([Action[string, string]]{
-                    param($m, $t)
-                    $LogBox.SelectionStart = $LogBox.TextLength
-                    $LogBox.SelectionColor = switch ($t) {
-                        "Success" { $Theme.Success }
-                        "Warning" { $Theme.Warning }
-                        "Error"   { $Theme.Danger }
-                        "Exec"    { $Theme.AccentGlow }
-                        Default   { $Theme.TextMuted }
-                    }
-                    $LogBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [$($t.ToUpper().PadRight(7))] $m`n")
-                    $LogBox.ScrollToCaret()
-                }, $Msg, $Type)
-            }
-
-            try {
-                $Exec = [scriptblock]::Create($CodeStr)
-                & $Exec
-            } catch {
-                Write-Log "Execution Error: $($_.Exception.Message)" "Error"
-            }
-        }).AddArgument($TargetCode).AddArgument($LogBox).AddArgument($script:Theme).AddArgument($script:BackupDir)
-
-        $Runspace = [runspacefactory]::CreateRunspace()
-        $Runspace.ThreadOptions = "ReuseThread"
-        $Runspace.Open()
-        $PS.Runspace = $Runspace
-
-        $null = $PS.BeginInvoke()
-
-        $Timer = New-Object System.Windows.Forms.Timer
-        $Timer.Interval = 350
-        $Timer.Tag = @{ Button = $B; PS = $PS; Runspace = $Runspace; Meta = $Meta; NewActive = $TargetActive }
-        $Timer.Add_Tick({
-            $State = $this.Tag
-            if ($State.PS.InvocationStateInfo.State -ne "Running") {
-                $State.Button.Enabled = $true
-                Update-ToggleStateVisual $State.Button $State.NewActive
-
-                $State.PS.Dispose()
-                $State.Runspace.Close()
-                $State.Runspace.Dispose()
-
-                $this.Stop()
-                $this.Dispose()
-            }
-        })
-        $Timer.Start()
+        Invoke-AdminWorksAction $TargetCode $B {
+            param($b)
+            Update-ToggleStateVisual $b $TargetActive
+        }
     })
 
-    $P.Controls.AddRange(@($TagLbl, $IconLbl, $TitleLbl, $DescLbl, $Btn))
+    $P.Controls.Add($Btn)
     $CategoryPanel.Controls.Add($P)
 
     $script:AllCards.Add([PSCustomObject]@{
@@ -1002,6 +899,7 @@ function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc
     })
     $script:ToggleCards.Add($ToggleMeta)
 }
+
 # --- [Sidebar Tabs Navigation Definition] ---
 $TabList = @(
     @{ Id = "Presets";   Icon = $UI.Presets;  Name = "Preset Profiles"; Desc = "1-Click Curated Optimization & Safety Profiles" },
