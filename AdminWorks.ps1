@@ -291,7 +291,7 @@ $SearchBox.Add_KeyDown({
     if ($_.KeyCode -eq [System.Windows.Forms.Keys]::Escape) {
         $this.Text = $SearchPlaceholder
         $this.ForeColor = $script:Theme.TextSubtle
-        $Form.Focus()
+        [void]$Form.Focus()
         $_.SuppressKeyPress = $true
     }
 })
@@ -782,7 +782,7 @@ function New-BaseCardPanel ($CategoryPanel, $CategoryTag, $IconGlyph, $Title, $D
         if (-not $this.Tag -or $this.Tag -isnot [hashtable]) { $this.Tag = @{} }
         $this.Tag.IsHovered = $true
         $this.Invalidate()
-        if ($CategoryPanel -and $CategoryPanel.CanFocus) { $CategoryPanel.Focus() }
+        if ($CategoryPanel -and $CategoryPanel.CanFocus) { [void]$CategoryPanel.Focus() }
     })
     $P.Add_MouseLeave({ 
         $this.BackColor = $script:Theme.Card
@@ -2143,7 +2143,7 @@ Select-Tab "Presets"
 $Form.Add_KeyDown({
     # Ctrl + F: Quick Search
     if ($_.Control -and $_.KeyCode -eq [System.Windows.Forms.Keys]::F) {
-        $SearchBox.Focus()
+        [void]$SearchBox.Focus()
         $SearchBox.SelectAll()
         $_.SuppressKeyPress = $true
     }
@@ -2169,7 +2169,7 @@ $Form.Add_KeyDown({
         if ($SearchBox.Text -ne $SearchPlaceholder) {
             $SearchBox.Text = $SearchPlaceholder
             $SearchBox.ForeColor = $script:Theme.TextSubtle
-            $Form.Focus()
+            [void]$Form.Focus()
             $_.SuppressKeyPress = $true
         }
     }
