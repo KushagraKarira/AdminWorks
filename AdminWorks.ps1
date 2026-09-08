@@ -8,7 +8,7 @@
 # --- [Self-Elevate to Administrator] ---
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     $scriptPath = if ($PSCommandPath) { $PSCommandPath } else { $MyInvocation.MyCommand.Definition }
-    Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-ExecutionPolicy Bypass", "-File `"$scriptPath`"" -Verb RunAs
+    Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-NoProfile", "-ExecutionPolicy Bypass", "-File `"$scriptPath`"" -Verb RunAs
     exit
 }
 
@@ -192,7 +192,7 @@ $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
     ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 12, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false
 }
 $TitleSub = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "ENTERPRISE SUITE v5.0  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(42, 36); AutoSize = $true
+    Text        = "V5.2  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(42, 36); AutoSize = $true
     ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
     Cursor      = [System.Windows.Forms.Cursors]::Hand; UseMnemonic = $false
 }
@@ -285,15 +285,20 @@ $CenterPanel = New-Object System.Windows.Forms.Panel -Property @{
     BackColor = $script:Theme.Header
     Padding   = New-Object System.Windows.Forms.Padding(12, 0, 12, 0)
 }
+# Instant zero-overhead OS identification from Registry (avoids heavy WMI/CIM startup penalty)
+$OSCaption = try {
+    (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -ErrorAction SilentlyContinue).ProductName
+} catch { "Windows $(if ($script:IsWin11) { '11' } else { '10' })" }
+if (-not $OSCaption) { $OSCaption = "Windows $(if ($script:IsWin11) { '11' } else { '10' })" }
+
 $LocalIP = "Scanning..."
 try {
-    $ipObj = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.PrefixOrigin -match 'Dhcp|Manual' -and $_.InterfaceAlias -notmatch 'Loopback|Virtual|vEthernet' } | Select-Object -First 1
-    if ($ipObj) { $LocalIP = $ipObj.IPAddress } else { $LocalIP = "No LAN" }
+    $dnsIP = [System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName()) | Where-Object { $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork -and -not [System.Net.IPAddress]::IsLoopback($_) } | Select-Object -First 1
+    if ($dnsIP) { $LocalIP = $dnsIP.IPAddressToString } else { $LocalIP = "LAN" }
 } catch { $LocalIP = "Offline" }
 
-$OSInfo = (Get-CimInstance Win32_OperatingSystem)
 $SysBadge = New-Object System.Windows.Forms.Label -Property @{
-    Text          = "$($env:COMPUTERNAME)  $($UI.Bullet)  IP: $LocalIP  $($UI.Bullet)  $($OSInfo.Caption)"
+    Text          = "$($env:COMPUTERNAME)  $($UI.Bullet)  IP: $LocalIP  $($UI.Bullet)  $OSCaption"
     Dock          = "Fill"; TextAlign = "MiddleCenter"
     ForeColor     = $script:Theme.TextMuted; Font = New-Object System.Drawing.Font($GlobalFont, 8.5)
     AutoEllipsis  = $true; UseMnemonic = $false
@@ -392,7 +397,7 @@ $LogBox = New-Object System.Windows.Forms.RichTextBox -Property @{
     Font        = New-Object System.Drawing.Font("Consolas", 9)
 }
 $LogContainer.Controls.Add($LogBox)
-$LogBox.SendToBack()
+$LogBox.BringToFront()
 
 # Horizontal separator above Log Drawer
 $TermHeader.Add_Paint({
@@ -469,7 +474,7 @@ $MainArea = New-Object System.Windows.Forms.Panel -Property @{
     BackColor = $script:Theme.Bg
 }
 $Form.Controls.Add($MainArea)
-$MainArea.SendToBack()
+$MainArea.BringToFront()
 
 # Live Stats Bar
 $TelemetryBar = New-Object System.Windows.Forms.TableLayoutPanel -Property @{
@@ -533,12 +538,8 @@ $StatRAM  = New-StatWidget $UI.Ram "MEMORY USED"
 $StatDisk = New-StatWidget $UI.Disk "SYSTEM DRIVE (C:)"
 $StatUp   = New-StatWidget $UI.Uptime "SYSTEM UPTIME"
 
-# High-Performance CPU Counter
+# High-Performance CPU Counter (lazily initialized on first telemetry tick to avoid launch delay)
 $script:CpuCounter = $null
-try {
-    $script:CpuCounter = New-Object System.Diagnostics.PerformanceCounter("Processor", "% Processor Time", "_Total")
-    $null = $script:CpuCounter.NextValue()
-} catch {}
 
 # --- [Card Engine & Registration Setup] ---
 $script:AllCards = New-Object System.Collections.Generic.List[PSObject]
@@ -552,7 +553,7 @@ $ViewContainer = New-Object System.Windows.Forms.Panel -Property @{
     BackColor = $script:Theme.Bg
 }
 $MainArea.Controls.Add($ViewContainer)
-$ViewContainer.SendToBack()
+$ViewContainer.BringToFront()
 Enable-DoubleBuffering $ViewContainer
 
 # --- [Dynamic Responsive Layout Function] ---
@@ -771,11 +772,11 @@ function Update-ToggleStateVisual ($B, $Active) {
     if (-not $B -or -not $B.Tag) { return }
     $B.Tag.IsActive = $Active
     if ($Active) {
-        $B.Text = "ON (ACTIVE)"
+        $B.Text = "ENABLED"
         $B.BackColor = $script:Theme.Success
         $B.ForeColor = [System.Drawing.Color]::White
     } else {
-        $B.Text = "OFF (INACTIVE)"
+        $B.Text = "DISABLED"
         $B.BackColor = $script:Theme.SidebarActive
         $B.ForeColor = $script:Theme.TextMuted
     }
@@ -844,18 +845,18 @@ function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc
     })
     $P.Add_MouseLeave({ 
         $this.BackColor = $script:Theme.Card
-        if ($this.Tag -and $this.Tag -is [hashtable]) { $this.Tag.IsHovered = $false }
+        if ($this.Tag -and $this.Tag -is [hashtable]) { $this.Tag = @{} }
         $this.Invalidate()
     })
 
     $Btn = New-Object System.Windows.Forms.Button -Property @{
-        Text        = "CHECKING..."
-        Size        = New-Object System.Drawing.Size(110, 28)
-        Location    = New-Object System.Drawing.Point(196, 114)
+        Text        = "TOGGLE"
+        Size        = New-Object System.Drawing.Size(100, 28)
+        Location    = New-Object System.Drawing.Point(206, 114)
         Anchor      = [System.Windows.Forms.AnchorStyles]"Bottom, Right"
         FlatStyle   = "Flat"
         BackColor   = $script:Theme.SidebarActive
-        ForeColor   = $script:Theme.TextMuted
+        ForeColor   = $script:Theme.TextMain
         Font        = New-Object System.Drawing.Font($GlobalFont, 7.5, [System.Drawing.FontStyle]::Bold)
         Cursor      = [System.Windows.Forms.Cursors]::Hand
         UseMnemonic = $false
@@ -864,7 +865,6 @@ function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc
 
     $ToggleMeta = [PSCustomObject]@{
         Button        = $Btn
-        CheckCode     = $CheckAction.ToString()
         EnableCode    = $EnableAction.ToString()
         DisableCode   = $DisableAction.ToString()
         IsActive      = $false
@@ -872,20 +872,13 @@ function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc
 
     $Btn.Tag = $ToggleMeta
 
-    # Initial State Evaluation
-    try {
-        $initStatus = [bool](& ([scriptblock]::Create($ToggleMeta.CheckCode)))
-        Update-ToggleStateVisual $Btn $initStatus
-    } catch {
-        Update-ToggleStateVisual $Btn $false
-    }
-
+    # Instant clean toggle action without any blocking system state probing
     $Btn.Add_Click({
         $B = $this
         $Meta = $B.Tag
-        $CurrentOn = $Meta.IsActive
-        $TargetCode = if ($CurrentOn) { $Meta.DisableCode } else { $Meta.EnableCode }
-        $TargetLabel = if ($CurrentOn) { "DISABLING..." } else { "ENABLING..." }
+        $TargetActive = -not $Meta.IsActive
+        $TargetCode = if ($TargetActive) { $Meta.EnableCode } else { $Meta.DisableCode }
+        $TargetLabel = if ($TargetActive) { "ENABLING..." } else { "DISABLING..." }
 
         $B.Enabled = $false
         $B.Text = $TargetLabel
@@ -930,18 +923,12 @@ function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc
 
         $Timer = New-Object System.Windows.Forms.Timer
         $Timer.Interval = 350
-        $Timer.Tag = @{ Button = $B; PS = $PS; Runspace = $Runspace; Meta = $Meta }
+        $Timer.Tag = @{ Button = $B; PS = $PS; Runspace = $Runspace; Meta = $Meta; NewActive = $TargetActive }
         $Timer.Add_Tick({
             $State = $this.Tag
             if ($State.PS.InvocationStateInfo.State -ne "Running") {
                 $State.Button.Enabled = $true
-
-                try {
-                    $newStatus = [bool](& ([scriptblock]::Create($State.Meta.CheckCode)))
-                    Update-ToggleStateVisual $State.Button $newStatus
-                } catch {
-                    Update-ToggleStateVisual $State.Button (-not $State.Meta.IsActive)
-                }
+                Update-ToggleStateVisual $State.Button $State.NewActive
 
                 $State.PS.Dispose()
                 $State.Runspace.Close()
@@ -965,7 +952,6 @@ function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc
     })
     $script:ToggleCards.Add($ToggleMeta)
 }
-
 # --- [Sidebar Tabs Navigation Definition] ---
 $TabList = @(
     @{ Id = "Presets";   Icon = $UI.Presets;  Name = "Preset Profiles"; Desc = "1-Click Curated Optimization & Safety Profiles" },
@@ -2147,7 +2133,12 @@ $Form.Add_KeyDown({
 $TelemetryTimer = New-Object System.Windows.Forms.Timer -Property @{Interval = 2000; Enabled = $true}
 $TelemetryTimer.Add_Tick({
     try {
-        if ($script:CpuCounter) {
+        if (-not $script:CpuCounter) {
+            try {
+                $script:CpuCounter = New-Object System.Diagnostics.PerformanceCounter("Processor", "% Processor Time", "_Total")
+                $null = $script:CpuCounter.NextValue()
+            } catch {}
+        } else {
             $cpuVal = [math]::Round($script:CpuCounter.NextValue(), 0)
             $StatCPU.Text = "$cpuVal% Utilization"
         }
@@ -2175,6 +2166,12 @@ $Form.Add_FormClosing({
     $TelemetryTimer.Stop()
     $TelemetryTimer.Dispose()
     if ($script:CpuCounter) { $script:CpuCounter.Dispose() }
+})
+
+# Asynchronous post-launch initialization (runs after window is visible on screen)
+$Form.Add_Shown({
+    $Form.Update()
+    Update-ResponsiveLayout
 })
 
 Write-Log "AdminWorks Pro Suite v5.0 loaded and ready." "Success"
