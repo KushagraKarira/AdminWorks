@@ -1,6 +1,6 @@
 <#
 ================================================================================
-  ADMINWORKS PRO v5.0 - Enterprise Windows Administration & Optimization Suite
+  ADMINWORKS PRO v5.3 - Enterprise Windows Administration & Optimization Suite
   Compatible with Windows 10 & Windows 11
 ================================================================================
 #>
@@ -164,12 +164,17 @@ $Form.SuspendLayout()
 
 Enable-DoubleBuffering $Form
 
-# Apply Dark Mode Frame Attribute
+# Apply Windows 11 Dark Mode & Fluent Rounded Corners
 try {
     $darkValue = 1
     $res = [NativeMethods]::DwmSetWindowAttribute($Form.Handle, 20, [ref]$darkValue, 4)
     if ($res -ne 0) {
         [NativeMethods]::DwmSetWindowAttribute($Form.Handle, 19, [ref]$darkValue, 4) | Out-Null
+    }
+    # DWMWA_WINDOW_CORNER_PREFERENCE (33) -> DWMWCP_ROUND (2)
+    if ($script:IsWin11) {
+        $cornerPreference = 2
+        [NativeMethods]::DwmSetWindowAttribute($Form.Handle, 33, [ref]$cornerPreference, 4) | Out-Null
     }
 } catch {}
 
@@ -196,7 +201,7 @@ $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
     ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 12, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false
 }
 $TitleSub = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "v5.3 $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(42, 36); AutoSize = $true
+    Text        = "v5.3  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(42, 36); AutoSize = $true
     ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
     Cursor      = [System.Windows.Forms.Cursors]::Hand; UseMnemonic = $false
 }
@@ -280,6 +285,14 @@ $SearchBox.Add_GotFocus({
 })
 $SearchBox.Add_LostFocus({ 
     if ([string]::IsNullOrWhiteSpace($this.Text)) { $this.Text = $SearchPlaceholder; $this.ForeColor = $script:Theme.TextSubtle } 
+})
+$SearchBox.Add_KeyDown({
+    if ($_.KeyCode -eq [System.Windows.Forms.Keys]::Escape) {
+        $this.Text = $SearchPlaceholder
+        $this.ForeColor = $script:Theme.TextSubtle
+        $Form.Focus()
+        $_.SuppressKeyPress = $true
+    }
 })
 $SearchPill.Controls.AddRange(@($SearchIconLbl, $SearchBox))
 
@@ -369,7 +382,7 @@ $Sidebar.Add_Paint({
 # --- [Bottom Console Drawer] ---
 $LogContainer = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Bottom"
-    Height    = 180
+    Height    = 34
     BackColor = $script:Theme.TerminalBg
     Padding   = New-Object System.Windows.Forms.Padding(14, 4, 14, 8)
 }
@@ -428,7 +441,7 @@ function New-TermBtn($Text, $Action) {
 }
 
 $BtnToggleDrawer = New-Object System.Windows.Forms.Button -Property @{
-    Text        = "COLLAPSE"; Size = New-Object System.Drawing.Size(88, 22)
+    Text        = "EXPAND"; Size = New-Object System.Drawing.Size(88, 22)
     FlatStyle   = "Flat"; BackColor = $script:Theme.Card; ForeColor = $script:Theme.AccentGlow
     Font        = New-Object System.Drawing.Font($GlobalFont, 7.5, [System.Drawing.FontStyle]::Bold)
     Margin      = New-Object System.Windows.Forms.Padding(3, 1, 3, 1)
@@ -448,11 +461,21 @@ $BtnToggleDrawer.Add_Click({
 
 $TermBtnContainer.Controls.Add($BtnToggleDrawer)
 New-TermBtn "EXPORT" { 
-    $Path = "$env:USERPROFILE\Desktop\AdminWorks_Log_$((Get-Date).ToString('yyyy-MM-dd_HHmmss')).txt"
-    $LogBox.Text | Out-File -FilePath $Path -Encoding UTF8
+    $desk = [Environment]::GetFolderPath("Desktop")
+    if (-not (Test-Path $desk)) { $desk = if ($env:USERPROFILE) { "$env:USERPROFILE\Desktop" } else { $env:TEMP } }
+    $Path = Join-Path $desk "AdminWorks_Log_$((Get-Date).ToString('yyyy-MM-dd_HHmmss')).txt"
+    $content = if ([string]::IsNullOrWhiteSpace($LogBox.Text)) { "AdminWorks Execution Log - Empty" } else { $LogBox.Text }
+    $content | Out-File -FilePath $Path -Encoding UTF8
     Write-Log "Log exported to: $Path" "Success"
 }
-New-TermBtn "COPY ALL" { [System.Windows.Forms.Clipboard]::SetText($LogBox.Text); Write-Log "Console copied to clipboard." "Success" }
+New-TermBtn "COPY ALL" { 
+    if (-not [string]::IsNullOrWhiteSpace($LogBox.Text)) {
+        [System.Windows.Forms.Clipboard]::SetText($LogBox.Text)
+        Write-Log "Console copied to clipboard." "Success"
+    } else {
+        Write-Log "Console is empty, nothing to copy." "Warning"
+    }
+}
 New-TermBtn "CLEAR" { $LogBox.Clear(); Write-Log "Console cleared." "Info" }
 
 function Write-Log ($Msg, $Type = "Info") {
@@ -532,7 +555,24 @@ function New-StatWidget($IconGlyph, $Title) {
         ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 9, [System.Drawing.FontStyle]::Bold)
         UseMnemonic = $false
     }
-    $P.Controls.AddRange(@($LIcon, $LTitle, $LVal))
+
+    # Mini Progress Meter Bar
+    $MeterTrack = New-Object System.Windows.Forms.Panel -Property @{
+        Height    = 3
+        Dock      = "Bottom"
+        BackColor = [System.Drawing.Color]::FromArgb(18, 22, 30)
+    }
+    $MeterFill = New-Object System.Windows.Forms.Panel -Property @{
+        Dock      = "Left"
+        Width     = 0
+        BackColor = $script:Theme.Accent
+    }
+    $MeterTrack.Controls.Add($MeterFill)
+
+    $LVal | Add-Member -MemberType NoteProperty -Name "Fill" -Value $MeterFill -Force
+    $LVal | Add-Member -MemberType NoteProperty -Name "Meter" -Value $MeterTrack -Force
+
+    $P.Controls.AddRange(@($LIcon, $LTitle, $LVal, $MeterTrack))
     $TelemetryBar.Controls.Add($P)
     return $LVal
 }
@@ -665,6 +705,7 @@ function New-TweakCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc,
         if (-not $this.Tag -or $this.Tag -isnot [hashtable]) { $this.Tag = @{} }
         $this.Tag.IsHovered = $true
         $this.Invalidate()
+        if ($CategoryPanel -and $CategoryPanel.CanFocus) { $CategoryPanel.Focus() }
     })
     $P.Add_MouseLeave({ 
         $this.BackColor = $script:Theme.Card
@@ -699,6 +740,12 @@ function New-TweakCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc,
         $B.Text = "RUNNING..."
         $B.BackColor = $script:Theme.Warning
         $B.ForeColor = [System.Drawing.Color]::Black
+
+        # Auto-expand console drawer to show live execution
+        if ($LogContainer.Height -le 40) {
+            $LogContainer.Height = 180
+            $BtnToggleDrawer.Text = "COLLAPSE"
+        }
 
         $PS = [powershell]::Create().AddScript({
             param($CodeStr, $LogBox, $Theme, $BackupDir)
@@ -844,6 +891,7 @@ function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc
         if (-not $this.Tag -or $this.Tag -isnot [hashtable]) { $this.Tag = @{} }
         $this.Tag.IsHovered = $true
         $this.Invalidate()
+        if ($CategoryPanel -and $CategoryPanel.CanFocus) { $CategoryPanel.Focus() }
     })
     $P.Add_MouseLeave({ 
         $this.BackColor = $script:Theme.Card
@@ -1091,13 +1139,24 @@ foreach ($tab in $TabList) {
     # Tab Text Label
     $TextLbl = New-Object System.Windows.Forms.Label -Property @{
         Text        = $tab.Name
-        Location    = New-Object System.Drawing.Point(42, 10); Size = New-Object System.Drawing.Size(182, 20)
+        Location    = New-Object System.Drawing.Point(42, 10); Size = New-Object System.Drawing.Size(155, 20)
         ForeColor   = $script:Theme.TextMuted; Font = New-Object System.Drawing.Font($GlobalFont, 8.5, [System.Drawing.FontStyle]::Bold)
         BackColor   = [System.Drawing.Color]::Transparent
+        AutoEllipsis= $true
         UseMnemonic = $false
     }
 
-    $ItemPanel.Controls.AddRange(@($Indicator, $IconLbl, $TextLbl))
+    # Tab Badge Indicator (Live Tool Count)
+    $BadgeLbl = New-Object System.Windows.Forms.Label -Property @{
+        Text        = ""
+        Location    = New-Object System.Drawing.Point(198, 12); Size = New-Object System.Drawing.Size(34, 16)
+        ForeColor   = $script:Theme.TextSubtle; Font = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
+        BackColor   = [System.Drawing.Color]::Transparent
+        TextAlign   = "MiddleRight"
+        UseMnemonic = $false
+    }
+
+    $ItemPanel.Controls.AddRange(@($Indicator, $IconLbl, $TextLbl, $BadgeLbl))
 
     # Click & Hover Handlers
     $clickHandler = { Select-Tab $this.Tag }
@@ -1120,6 +1179,7 @@ foreach ($tab in $TabList) {
         Indicator = $Indicator
         Icon      = $IconLbl
         Text      = $TextLbl
+        Badge     = $BadgeLbl
     }
     $BtnY = [int]($BtnY + 44)
 }
@@ -1135,8 +1195,21 @@ $SearchBox.Add_TextChanged({
         foreach ($k in $script:CategoryPanels.Keys) { 
             $script:CategoryPanels[$k].Visible = ($k -eq $script:CurrentTabId) 
         }
-        foreach ($item in $script:SidebarItems.Values) {
-            if ($item.Panel.Tag -ne $script:CurrentTabId) {
+        foreach ($k in $script:SidebarItems.Keys) {
+            $item = $script:SidebarItems[$k]
+            $totalInTab = ($script:CategoryPanels[$k].Controls | Where-Object { $_ -is [System.Windows.Forms.Panel] -and $_.Tag -ne "Banner" }).Count
+            if ($item.Badge) { 
+                $item.Badge.Text = "$totalInTab"
+                $item.Badge.ForeColor = $script:Theme.TextSubtle
+            }
+            if ($k -eq $script:CurrentTabId) {
+                $item.Panel.BackColor = $script:Theme.SidebarActive
+                $item.Indicator.BackColor = $script:Theme.Accent
+                $item.Icon.ForeColor = $script:Theme.AccentGlow
+                $item.Text.ForeColor = [System.Drawing.Color]::White
+            } else {
+                $item.Panel.BackColor = $script:Theme.Sidebar
+                $item.Indicator.BackColor = [System.Drawing.Color]::Transparent
                 $item.Icon.ForeColor = $script:Theme.TextMuted
                 $item.Text.ForeColor = $script:Theme.TextMuted
             }
@@ -1165,10 +1238,15 @@ $SearchBox.Add_TextChanged({
         }
     }
 
-    # Update sidebar indicators: highlight tabs with matches
+    # Update sidebar indicators and live match count badges
     foreach ($k in $script:SidebarItems.Keys) {
         $item = $script:SidebarItems[$k]
-        if ($tabMatchCounts[$k] -gt 0) {
+        $matchNum = $tabMatchCounts[$k]
+        if ($item.Badge) {
+            $item.Badge.Text = "$matchNum"
+            $item.Badge.ForeColor = if ($matchNum -gt 0) { $script:Theme.AccentGlow } else { $script:Theme.TextSubtle }
+        }
+        if ($matchNum -gt 0) {
             $item.Icon.ForeColor = $script:Theme.AccentGlow
             $item.Text.ForeColor = [System.Drawing.Color]::White
         } else {
@@ -1215,8 +1293,13 @@ $P_Presets = $script:CategoryPanels["Presets"]
 
 New-TweakCard $P_Presets $UI.Sparkle "Gamer Mode Profile" "Preset Profile" "Applies Ultimate Power Plan, disables GameDVR, prioritizes foreground threads & frees RAM." {
     Write-Log "Applying GAMER MODE PRESET..." "Warning"
-    powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 | Out-Null
-    Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value 0
+    $planOut = powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null
+    if ($planOut -match '([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})') {
+        powercfg /setactive $matches[1] | Out-Null
+    } else {
+        powercfg /setactive e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null | Out-Null
+    }
+    Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value "0" 
     reg add "HKCU\System\GameConfigStore" /v "GameDVR_Enabled" /t REG_DWORD /d 0 /f | Out-Null
     reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\GameDVR" /v "AllowGameDVR" /t REG_DWORD /d 0 /f | Out-Null
     reg add "HKLM\SYSTEM\CurrentControlSet\Control\PriorityControl" /v Win32PrioritySeparation /t REG_DWORD /d 38 /f | Out-Null
@@ -1262,7 +1345,8 @@ New-TweakCard $P_Presets $UI.Refresh "Express Maintenance" "Preset Profile" "Run
     foreach ($d in @("C", "D")) { if (Test-Path "$d`:\") { Optimize-Volume -DriveLetter $d -ReTrim -Defrag -Verbose 4>&1 | Out-Null } }
     cleanmgr /sagerun:1 | Out-Null
     [System.GC]::Collect()
-    w32tm /resync /force | Out-Null
+    Start-Service w32time -ErrorAction SilentlyContinue
+    w32tm /resync /force 2>$null | Out-Null
     Write-Log "Express Maintenance completed." "Success"
 }
 
@@ -1300,6 +1384,7 @@ New-TweakCard $P_Maint $UI.Maint "Clean Component Store" "WinSxS Reduction" "Shr
 New-TweakCard $P_Maint $UI.Refresh "Reset Windows Update" "Update Repair" "Purges stuck SoftwareDistribution & Catroot2 caches and restarts services." {
     Write-Log "Halting Windows Update & cryptographic services..." "Warning"
     Stop-Service -Name "wuauserv", "bits", "cryptsvc" -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 600
     Remove-Item "$env:SystemRoot\SoftwareDistribution\*" -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item "$env:SystemRoot\System32\catroot2\*" -Recurse -Force -ErrorAction SilentlyContinue
     Start-Service -Name "wuauserv", "bits", "cryptsvc" -ErrorAction SilentlyContinue
@@ -1311,7 +1396,8 @@ New-TweakCard $P_Maint $UI.Context "Rebuild Icon & Font Cache" "Explorer Repair"
     Stop-Process -Name explorer -Force
     Remove-Item "$env:LOCALAPPDATA\IconCache.db" -Force -ErrorAction SilentlyContinue
     Remove-Item "$env:LOCALAPPDATA\Microsoft\Windows\Explorer\iconcache*" -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Milliseconds 600
+    Remove-Item "$env:LOCALAPPDATA\Microsoft\Windows\Explorer\thumbcache*" -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 700
     Start-Process explorer.exe
     Write-Log "Icon and font caches purged and rebuilt." "Success"
 }
@@ -1366,8 +1452,13 @@ New-TweakCard $P_Maint $UI.Refresh "Rebuild Windows Search Index" "Search Fix" "
 $P_Perf = $script:CategoryPanels["Perf"]
 
 New-TweakCard $P_Perf $UI.Perf "Ultimate Power Plan" "Power Scheme" "Unlocks and activates the hidden Windows Ultimate Performance power plan." {
-    powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 | Out-Null
-    Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value 0
+    $planOut = powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null
+    if ($planOut -match '([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})') {
+        powercfg /setactive $matches[1] | Out-Null
+    } else {
+        powercfg /setactive e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null | Out-Null
+    }
+    Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value "0" 
     Write-Log "Ultimate Performance power plan applied." "Success"
 }
 
@@ -1540,7 +1631,7 @@ New-TweakCard $P_Privacy $UI.Apps "Universal OEM Debloat" "App Purge" "Removes c
         $installed = Get-AppxPackage -Name $app -AllUsers -ErrorAction SilentlyContinue
         if ($installed) {
             $installed | Remove-AppxPackage -AllUsers -ErrorAction SilentlyContinue
-            Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like $app } | Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
+            Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like $app -or $_.PackageName -like $app } | Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
             Write-Log "Removed: $app" "Success"
             $count = [int]($count + 1)
         }
@@ -1656,18 +1747,29 @@ New-ToggleCard $P_Context $UI.Context "Classic Context Menu" "Windows 11 UI" "To
     }
 
 New-ToggleCard $P_Context $UI.Admin "Add 'Take Ownership'" "Context Menu" "Toggles a 'Take Ownership' option on file and folder right-click menus." `
-    { Test-Path "HKCR:\*\shell\runas" } `
+    { $null } `
     {
-        $regPath = "HKCR:\*\shell\runas"
-        New-Item -Path $regPath -Force | Out-Null
-        Set-ItemProperty -Path $regPath -Name "(Default)" -Value "Take Ownership"
-        Set-ItemProperty -Path $regPath -Name "NoWorkingDirectory" -Value ""
-        New-Item -Path "$regPath\command" -Force | Out-Null
-        Set-ItemProperty -Path "$regPath\command" -Name "(Default)" -Value "cmd.exe /c takeown /f `"%1`" && icacls `"%1`" /grant administrators:F"
-        Write-Log "Take Ownership context menu shortcut added." "Success"
+        # Add Take Ownership for files
+        $fileReg = "HKCR:\*\shell\TakeOwnership"
+        New-Item -Path $fileReg -Force | Out-Null
+        Set-ItemProperty -Path $fileReg -Name "(Default)" -Value "Take Ownership"
+        Set-ItemProperty -Path $fileReg -Name "HasLUAShield" -Value ""
+        New-Item -Path "$fileReg\command" -Force | Out-Null
+        Set-ItemProperty -Path "$fileReg\command" -Name "(Default)" -Value "cmd.exe /c takeown /f `"%1`" && icacls `"%1`" /grant administrators:F"
+
+        # Add Take Ownership for folders/directories
+        $dirReg = "HKCR:\Directory\shell\TakeOwnership"
+        New-Item -Path $dirReg -Force | Out-Null
+        Set-ItemProperty -Path $dirReg -Name "(Default)" -Value "Take Ownership"
+        Set-ItemProperty -Path $dirReg -Name "HasLUAShield" -Value ""
+        New-Item -Path "$dirReg\command" -Force | Out-Null
+        Set-ItemProperty -Path "$dirReg\command" -Name "(Default)" -Value "cmd.exe /c takeown /f `"%1`" /r /d y && icacls `"%1`" /grant administrators:F /t"
+
+        Write-Log "Take Ownership context menu shortcut added (Files & Folders)." "Success"
     } `
     {
-        Remove-Item "HKCR:\*\shell\runas" -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item "HKCR:\*\shell\TakeOwnership" -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item "HKCR:\Directory\shell\TakeOwnership" -Recurse -Force -ErrorAction SilentlyContinue
         Write-Log "Take Ownership context menu shortcut removed." "Warning"
     }
 
@@ -2056,6 +2158,8 @@ New-TweakCard $P_Admin $UI.Shield "Create System Restore Point" "Safety Checkpoi
     Write-Log "Creating Windows System Restore Point..." "Exec"
     try {
         Enable-ComputerRestore -Drive "C:\" -ErrorAction SilentlyContinue
+        # Bypass Windows 24-hour restore point frequency constraint
+        reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore" /v SystemRestorePointCreationFrequency /t REG_DWORD /d 0 /f 2>$null | Out-Null
         Checkpoint-Computer -Description "AdminWorks_Checkpoint" -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop
         Write-Log "Restore point created successfully." "Success"
     } catch { Write-Log "Restore Point Error: $($_.Exception.Message)" "Error" }
@@ -2138,15 +2242,45 @@ Select-Tab "Presets"
 
 # Global Keyboard Shortcuts
 $Form.Add_KeyDown({
+    # Ctrl + F: Quick Search
     if ($_.Control -and $_.KeyCode -eq [System.Windows.Forms.Keys]::F) {
         $SearchBox.Focus()
         $SearchBox.SelectAll()
         $_.SuppressKeyPress = $true
     }
+    # Ctrl + L: Clear Console Log
     elseif ($_.Control -and $_.KeyCode -eq [System.Windows.Forms.Keys]::L) {
         $LogBox.Clear()
         Write-Log "Console cleared via shortcut." "Info"
         $_.SuppressKeyPress = $true
+    }
+    # Ctrl + ` (tilde) or Ctrl + J: Toggle Console Drawer
+    elseif ($_.Control -and ($_.KeyCode -eq [System.Windows.Forms.Keys]::Oemtilde -or $_.KeyCode -eq [System.Windows.Forms.Keys]::J)) {
+        if ($LogContainer.Height -gt 40) {
+            $LogContainer.Height = 32
+            $BtnToggleDrawer.Text = "EXPAND"
+        } else {
+            $LogContainer.Height = 180
+            $BtnToggleDrawer.Text = "COLLAPSE"
+        }
+        $_.SuppressKeyPress = $true
+    }
+    # Escape: Clear active search filter
+    elseif ($_.KeyCode -eq [System.Windows.Forms.Keys]::Escape) {
+        if ($SearchBox.Text -ne $SearchPlaceholder) {
+            $SearchBox.Text = $SearchPlaceholder
+            $SearchBox.ForeColor = $script:Theme.TextSubtle
+            $Form.Focus()
+            $_.SuppressKeyPress = $true
+        }
+    }
+    # Ctrl + 1..9: Rapid Tab Navigation
+    elseif ($_.Control -and $_.KeyCode -ge [System.Windows.Forms.Keys]::D1 -and $_.KeyCode -le [System.Windows.Forms.Keys]::D9) {
+        $tabIdx = [int]$_.KeyCode - [int][System.Windows.Forms.Keys]::D1
+        if ($tabIdx -lt $TabList.Count) {
+            Select-Tab $TabList[$tabIdx].Id
+            $_.SuppressKeyPress = $true
+        }
     }
 })
 
@@ -2162,19 +2296,37 @@ $TelemetryTimer.Add_Tick({
         } else {
             $cpuVal = [math]::Round($script:CpuCounter.NextValue(), 0)
             $StatCPU.Text = "$cpuVal% Utilization"
+            if ($StatCPU.Fill -and $StatCPU.Meter) {
+                $cpuClamped = [math]::Max(0, [math]::Min(100, $cpuVal))
+                $StatCPU.Fill.Width = [int]($StatCPU.Meter.Width * ($cpuClamped / 100))
+                $StatCPU.Fill.BackColor = if ($cpuClamped -gt 85) { $script:Theme.Danger } elseif ($cpuClamped -gt 60) { $script:Theme.Warning } else { $script:Theme.Accent }
+            }
         }
 
-        $os = Get-CimInstance Win32_OperatingSystem
-        $freeMemGB = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
-        $totMemGB = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
-        $usedMemGB = [math]::Round($totMemGB - $freeMemGB, 1)
-        $StatRAM.Text = "$usedMemGB / $totMemGB GB"
+        $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+        if ($os) {
+            $freeMemGB = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
+            $totMemGB = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
+            $usedMemGB = [math]::Round($totMemGB - $freeMemGB, 1)
+            $StatRAM.Text = "$usedMemGB / $totMemGB GB"
+            if ($StatRAM.Fill -and $StatRAM.Meter -and $totMemGB -gt 0) {
+                $ramPct = [math]::Max(0, [math]::Min(100, [int](($usedMemGB / $totMemGB) * 100)))
+                $StatRAM.Fill.Width = [int]($StatRAM.Meter.Width * ($ramPct / 100))
+                $StatRAM.Fill.BackColor = if ($ramPct -gt 90) { $script:Theme.Danger } elseif ($ramPct -gt 75) { $script:Theme.Warning } else { $script:Theme.AccentGlow }
+            }
+        }
 
         $c = Get-PSDrive C -ErrorAction SilentlyContinue
         if ($c -and $c.Used -ne $null -and $c.Free -ne $null) {
             $freeGB = [math]::Round([double]$c.Free / 1GB, 1)
             $totGB  = [math]::Round(([double]$c.Used + [double]$c.Free) / 1GB, 1)
             $StatDisk.Text = "$freeGB GB Free ($totGB GB)"
+            if ($StatDisk.Fill -and $StatDisk.Meter -and $totGB -gt 0) {
+                $usedGB = [double]$c.Used / 1GB
+                $diskPct = [math]::Max(0, [math]::Min(100, [int](($usedGB / $totGB) * 100)))
+                $StatDisk.Fill.Width = [int]($StatDisk.Meter.Width * ($diskPct / 100))
+                $StatDisk.Fill.BackColor = if ($diskPct -gt 90) { $script:Theme.Danger } else { $script:Theme.Success }
+            }
         }
 
         $span = (Get-Date) - $os.LastBootUpTime
@@ -2192,6 +2344,15 @@ $Form.Add_FormClosing({
 # Asynchronous post-launch initialization (runs after window is visible on screen)
 $Form.Add_Shown({
     $Form.Update()
+    
+    # Populate live tool count badges in sidebar
+    foreach ($k in $script:CategoryPanels.Keys) {
+        $c = ($script:CategoryPanels[$k].Controls | Where-Object { $_ -is [System.Windows.Forms.Panel] -and $_.Tag -ne "Banner" }).Count
+        if ($script:SidebarItems[$k] -and $script:SidebarItems[$k].Badge) {
+            $script:SidebarItems[$k].Badge.Text = "$c"
+        }
+    }
+    
     Update-ResponsiveLayout
 })
 
