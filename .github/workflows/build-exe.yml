@@ -1,12 +1,10 @@
 name: Compile PowerShell to EXE & Auto-Release
 
-# Trigger the workflow on pushes to main, or manually via the Actions tab
 on:
   push:
     branches: [ "main", "master" ]
   workflow_dispatch:
 
-# Grant the workflow permission to write to your repository releases
 permissions:
   contents: write
 
@@ -17,7 +15,7 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -29,9 +27,28 @@ jobs:
           Install-Module -Name ps2exe -Force -Scope CurrentUser -AcceptLicense -SkipPublisherCheck
 
       - name: Compile AdminWorks.ps1 to EXE
+        id: compile
         shell: powershell
         run: |
-          $ver = "5.0.0.${{ github.run_number }}"
+          # Synchronize version directly from AdminWorks.ps1
+          $scriptContent = Get-Content ".\AdminWorks.ps1" -Raw
+          $baseVer = "5.3"
+          if ($scriptContent -match 'v(\d+\.\d+)') {
+              $baseVer = $matches
+          }
+
+          $buildNum = "${{ github.run_number }}"
+          $fileVer = "$baseVer.0.$buildNum"
+          $tagVer = "v$baseVer.$buildNum"
+          $releaseTitle = "AdminWorks Pro v$baseVer (Build $buildNum)"
+
+          Write-Host "Synchronized Version: $baseVer | Tag: $tagVer | PE Version: $fileVer"
+
+          # Export variables to GITHUB_ENV for subsequent steps
+          "APP_VERSION=$baseVer" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TAG_NAME=$tagVer" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "RELEASE_NAME=$releaseTitle" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
           $ps2exeParams = @{
               InputFile    = ".\AdminWorks.ps1"
               OutputFile   = ".\AdminWorks.exe"
@@ -45,29 +62,26 @@ jobs:
               Description  = "Enterprise Windows Administration & Optimization Suite"
               Company      = "Kushagra Karira"
               Copyright    = "Copyright (c) 2026 Kushagra Karira"
-              Version      = $ver
+              Version      = $fileVer
           }
 
-          # Only attach icon if file actually exists in the repository
           if (Test-Path ".\app.ico") {
               $ps2exeParams["IconFile"] = ".\app.ico"
           }
 
-          # Execute compilation via splatting (avoids fragile backtick line continuations)
           Invoke-PS2EXE @ps2exeParams
 
-          # Ensure binary was successfully generated
           if (-not (Test-Path ".\AdminWorks.exe") -or (Get-Item ".\AdminWorks.exe").Length -lt 10000) {
-              throw "Compilation failed: AdminWorks.exe was not created or is corrupted."
+              throw "Compilation failed: AdminWorks.exe is missing or invalid."
           }
 
-          # Generate SHA256 checksum for security verification
+          # Generate SHA256 checksum
           $hash = (Get-FileHash -Path ".\AdminWorks.exe" -Algorithm SHA256).Hash
           "$hash  AdminWorks.exe" | Out-File -FilePath ".\AdminWorks.exe.sha256" -Encoding ascii
-          Write-Host "Build successful. SHA-256: $hash"
+          Write-Host "Build completed successfully. SHA-256: $hash"
 
       - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: AdminWorks-Build-${{ github.run_number }}
           path: |
@@ -75,19 +89,20 @@ jobs:
             .\AdminWorks.exe.sha256
           retention-days: 14
 
-      # Automatically publish a GitHub Release and mark as latest
+      # Publish GitHub Release using action-gh-release@v3 (Node 24)
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
-          tag_name: v5.0.${{ github.run_number }}
-          name: AdminWorks Pro v5.0 (Build ${{ github.run_number }})
+          tag_name: ${{ env.TAG_NAME }}
+          name: ${{ env.RELEASE_NAME }}
           body: |
-            ### AdminWorks Enterprise Suite v5.0 (Build ${{ github.run_number }})
+            ### AdminWorks Enterprise Suite v${{ env.APP_VERSION }} (Build ${{ github.run_number }})
             Automated production build of **AdminWorks Pro**.
 
             - **Executable**: `AdminWorks.exe`
+            - **Software Version**: v${{ env.APP_VERSION }} (Build ${{ github.run_number }})
             - **Architecture**: x64 (Native DPI-aware, Elevated)
-            - **Verification**: Check `AdminWorks.exe.sha256` for integrity
+            - **Integrity**: Verified with SHA-256 (`AdminWorks.exe.sha256`)
           files: |
             .\AdminWorks.exe
             .\AdminWorks.exe.sha256
