@@ -20,6 +20,7 @@ $script:IsWin11 = ($script:OSBuild -ge 22000)
 $script:IsWin10 = ($script:OSBuild -ge 10240 -and $script:OSBuild -lt 22000)
 
 # --- [High-DPI Scaling & Native Windows DWM Helpers] ---
+if (-not ([System.Management.Automation.PSTypeName]'NativeMethods').Type) {
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
@@ -43,6 +44,7 @@ public class NativeMethods {
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 }
 "@
+}
 
 try {
     # Per-Monitor V2 DPI Awareness (-4) for sharp text/UI rendering on 1080p, 1440p, 4K, and high-DPI displays
@@ -84,17 +86,13 @@ $script:Theme = @{
     TerminalBg    = [System.Drawing.Color]::FromArgb(7, 9, 12)         # Terminal Black
 }
 
-# Standard & Icon Fonts
-$GlobalFont = "Segoe UI Variable Display"
-$CheckFont = New-Object System.Drawing.Font($GlobalFont, 10)
-if ($CheckFont.Name -ne $GlobalFont) { $GlobalFont = "Segoe UI" }
-
-$IconFont = "Segoe Fluent Icons"
-$CheckIcon = New-Object System.Drawing.Font($IconFont, 10)
-if ($CheckIcon.Name -ne $IconFont) { 
-    $IconFont = "Segoe MDL2 Assets"
-    $CheckIcon2 = New-Object System.Drawing.Font($IconFont, 10)
-    if ($CheckIcon2.Name -ne $IconFont) { $IconFont = "Segoe UI Symbol" }
+# Standard & Icon Fonts - Instant OS-matched mapping
+if ($script:IsWin11) {
+    $GlobalFont = "Segoe UI Variable Display"
+    $IconFont   = "Segoe Fluent Icons"
+} else {
+    $GlobalFont = "Segoe UI"
+    $IconFont   = "Segoe MDL2 Assets"
 }
 
 # --- [Native Windows Icon Glyphs] ---
@@ -137,9 +135,11 @@ $UI = @{
 
 $SearchPlaceholder = "Search tools, tweaks & features..."
 
-# Backup Directory Setup
+# Backup Directory Setup - Lightweight IO check
 $script:BackupDir = "$env:LOCALAPPDATA\AdminWorks\Backups"
-if (-not (Test-Path $script:BackupDir)) { New-Item -ItemType Directory -Path $script:BackupDir -Force | Out-Null }
+if (-not [System.IO.Directory]::Exists($script:BackupDir)) {
+    [System.IO.Directory]::CreateDirectory($script:BackupDir) | Out-Null
+}
 
 # --- [Dynamic Screen Resolution Adaptation] ---
 $ScreenBounds  = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
@@ -157,6 +157,7 @@ $Form.StartPosition   = "CenterScreen"
 $Form.FormBorderStyle = "None"
 $Form.MinimumSize     = New-Object System.Drawing.Size(920, 620)
 $Form.KeyPreview      = $true
+$Form.SuspendLayout()
 
 Enable-DoubleBuffering $Form
 
@@ -192,7 +193,7 @@ $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
     ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 12, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false
 }
 $TitleSub = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "V5.2  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(42, 36); AutoSize = $true
+    Text        = "v5.3  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(42, 36); AutoSize = $true
     ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
     Cursor      = [System.Windows.Forms.Cursors]::Hand; UseMnemonic = $false
 }
@@ -580,26 +581,17 @@ function Update-ResponsiveLayout {
     if ($targetWidth -lt 280) { $targetWidth = 280 }
 
     $activePanel = $script:CategoryPanels[$script:CurrentTabId]
-    if ($activePanel) { $activePanel.SuspendLayout() }
-
-    foreach ($card in $script:AllCards) {
-        if ($card.Panel.Width -ne $targetWidth) {
-            $card.Panel.Width = $targetWidth
-        }
-    }
-
-    # Update category banner headers to span full width with uniform alignment
-    foreach ($p in $script:CategoryPanels.Values) {
-        if ($p) {
-            foreach ($ctrl in $p.Controls) {
-                if ($ctrl.Tag -eq "Banner") {
-                    $ctrl.Width = [math]::Max(400, $availWidth)
-                }
+    if ($activePanel) { 
+        $activePanel.SuspendLayout() 
+        foreach ($ctrl in $activePanel.Controls) {
+            if ($ctrl -is [System.Windows.Forms.Panel] -and $ctrl.Tag -ne "Banner") {
+                if ($ctrl.Width -ne $targetWidth) { $ctrl.Width = $targetWidth }
+            } elseif ($ctrl.Tag -eq "Banner") {
+                $ctrl.Width = [math]::Max(400, $availWidth)
             }
         }
+        $activePanel.ResumeLayout($true)
     }
-
-    if ($activePanel) { $activePanel.ResumeLayout($true) }
 }
 $ViewContainer.Add_SizeChanged({ Update-ResponsiveLayout })
 
@@ -2113,6 +2105,8 @@ New-TweakCard $P_Admin $UI.Shield "Defender Quick Scan" "Antivirus" "Updates thr
 }
 
 # --- [Default Tab Activation] ---
+$Form.ResumeLayout($false)
+
 Select-Tab "Presets"
 
 # Global Keyboard Shortcuts
