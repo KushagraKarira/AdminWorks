@@ -24,8 +24,14 @@ Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 public class NativeMethods {
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool SetProcessDpiAwarenessContext(IntPtr dpiContext);
+
     [DllImport("user32.dll")]
     public static extern bool SetProcessDPIAware();
+
+    [DllImport("shcore.dll")]
+    public static extern int SetProcessDpiAwareness(int awareness);
 
     [DllImport("user32.dll")]
     public static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
@@ -37,8 +43,25 @@ public class NativeMethods {
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 }
 "@
-[NativeMethods]::SetProcessDPIAware() | Out-Null
+
+try {
+    # Per-Monitor V2 DPI Awareness (-4) for sharp text/UI rendering on 1080p, 1440p, 4K, and high-DPI displays
+    if (-not [NativeMethods]::SetProcessDpiAwarenessContext([IntPtr](-4))) {
+        try { [NativeMethods]::SetProcessDpiAwareness(2) | Out-Null } catch { [NativeMethods]::SetProcessDPIAware() | Out-Null }
+    }
+} catch {
+    try { [NativeMethods]::SetProcessDPIAware() | Out-Null } catch {}
+}
 [System.Windows.Forms.Application]::EnableVisualStyles()
+
+function Enable-DoubleBuffering($ctrl) {
+    if (-not $ctrl) { return }
+    try {
+        $bf = [System.Reflection.BindingFlags]::Instance -bor [System.Reflection.BindingFlags]::NonPublic
+        $prop = $ctrl.GetType().GetProperty("DoubleBuffered", $bf)
+        if ($prop) { $prop.SetValue($ctrl, $true, $null) }
+    } catch {}
+}
 
 # --- [Theme & Design Palette] ---
 $script:Theme = @{
@@ -108,6 +131,8 @@ $UI = @{
     Ram        = [char]0xE7B8  # Memory
     Disk       = [char]0xEDA2  # Hard Drive
     Uptime     = [char]0xE823  # Clock / Time
+    ToggleOn   = [char]0xE8C8  # Checkmark / Toggle
+    ToggleOff  = [char]0xE894  # Clear / Off
 }
 
 $SearchPlaceholder = "Search tools, tweaks & features..."
@@ -118,8 +143,10 @@ if (-not (Test-Path $script:BackupDir)) { New-Item -ItemType Directory -Path $sc
 
 # --- [Dynamic Screen Resolution Adaptation] ---
 $ScreenBounds  = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
-$InitialWidth  = [math]::Max(960, [math]::Min(1280, [int]($ScreenBounds.Width * 0.90)))
-$InitialHeight = [math]::Max(640, [math]::Min(860, [int]($ScreenBounds.Height * 0.88)))
+$targetW       = [int]($ScreenBounds.Width * 0.85)
+$targetH       = [int]($ScreenBounds.Height * 0.85)
+$InitialWidth  = [math]::Max(1024, [math]::Min(2200, $targetW))
+$InitialHeight = [math]::Max(680,  [math]::Min(1400, $targetH))
 
 # --- [Main Form Window] ---
 $Form = New-Object System.Windows.Forms.Form
@@ -131,11 +158,7 @@ $Form.FormBorderStyle = "None"
 $Form.MinimumSize     = New-Object System.Drawing.Size(920, 620)
 $Form.KeyPreview      = $true
 
-try {
-    $bf = [System.Reflection.BindingFlags]::Instance -bor [System.Reflection.BindingFlags]::NonPublic
-    $prop = $Form.GetType().GetProperty("DoubleBuffered", $bf)
-    if ($prop) { $prop.SetValue($Form, $true, $null) }
-} catch {}
+Enable-DoubleBuffering $Form
 
 # Apply Dark Mode Frame Attribute
 try {
@@ -173,7 +196,11 @@ $TitleSub = New-Object System.Windows.Forms.Label -Property @{
     ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
     Cursor      = [System.Windows.Forms.Cursors]::Hand; UseMnemonic = $false
 }
-$TitleSub.Add_Click({ Start-Process "https://github.com/KushagraKarira/AdminWorks" })
+$TitleSub.Add_Click({ Start-Process "https://github.com/KushagraKarira/AdminWorks/releases" })
+try {
+    $SubTip = New-Object System.Windows.Forms.ToolTip
+    $SubTip.SetToolTip($TitleSub, "Click to check updates on GitHub Releases")
+} catch {}
 $TitleSub.Add_MouseEnter({ $this.ForeColor = $script:Theme.TextMain })
 $TitleSub.Add_MouseLeave({ $this.ForeColor = $script:Theme.AccentGlow })
 $BrandPanel.Controls.AddRange(@($LogoIcon, $TitleLbl, $TitleSub))
@@ -242,6 +269,7 @@ $SearchBox = New-Object System.Windows.Forms.TextBox -Property @{
     BorderStyle = "None"; BackColor = $script:Theme.Sidebar; ForeColor = $script:Theme.TextSubtle
     Font = New-Object System.Drawing.Font($GlobalFont, 9); Location = New-Object System.Drawing.Point(30, 8)
     Width = 236; Text = $SearchPlaceholder
+    Anchor = [System.Windows.Forms.AnchorStyles]"Top, Left, Right"
 }
 $SearchBox.Add_GotFocus({ 
     if ($this.Text -eq $SearchPlaceholder) { $this.Text = ""; $this.ForeColor = $script:Theme.TextMain } 
@@ -289,6 +317,20 @@ $Header.Add_MouseDown($dragHandler)
 $BrandPanel.Add_MouseDown($dragHandler)
 $CenterPanel.Add_MouseDown($dragHandler)
 $SysBadge.Add_MouseDown($dragHandler)
+
+# Double-click header to toggle maximize / restore on large displays
+$doubleClickHandler = {
+    if ($Form.WindowState -eq "Maximized") { 
+        $Form.WindowState = "Normal"
+        $BtnMax.Text = $UI.Maximize
+    } else { 
+        $Form.WindowState = "Maximized"
+        $BtnMax.Text = $UI.Restore
+    } 
+}
+$Header.Add_DoubleClick($doubleClickHandler)
+$CenterPanel.Add_DoubleClick($doubleClickHandler)
+$SysBadge.Add_DoubleClick($doubleClickHandler)
 
 # --- [Sidebar Navigation Container] ---
 $Sidebar = New-Object System.Windows.Forms.Panel -Property @{
@@ -471,31 +513,54 @@ $ViewContainer = New-Object System.Windows.Forms.Panel -Property @{
 }
 $MainArea.Controls.Add($ViewContainer)
 $ViewContainer.BringToFront()
+Enable-DoubleBuffering $ViewContainer
 
 # --- [Dynamic Responsive Layout Function] ---
 function Update-ResponsiveLayout {
     if (-not $ViewContainer -or $ViewContainer.ClientSize.Width -le 100) { return }
-    $availWidth = $ViewContainer.ClientSize.Width - 36
 
-    if ($availWidth -ge 1360) {
-        $cols = 4
-    } elseif ($availWidth -ge 960) {
-        $cols = 3
-    } elseif ($availWidth -ge 580) {
-        $cols = 2
+    $activePanel = $script:CategoryPanels[$script:CurrentTabId]
+    $availWidth = if ($activePanel -and $activePanel.ClientSize.Width -gt 100) {
+        $activePanel.ClientSize.Width - ($activePanel.Padding.Left + $activePanel.Padding.Right)
     } else {
-        $cols = 1
+        $ViewContainer.ClientSize.Width - 56
     }
+    if ($availWidth -lt 260) { return }
 
-    $spacing = 12
-    $targetWidth = [math]::Floor(($availWidth - ($spacing * ($cols - 1))) / $cols)
+    # Dynamically scale columns for large screens (1080p, 1440p, 4K, 5K, ultrawide)
+    # Target slot width around 320-350px per card (including 12px margins)
+    $cols = [math]::Max(1, [math]::Floor($availWidth / 330))
+    if ($cols -gt 16) { $cols = 16 }
+
+    # Calculate exact card width so all columns fit on one line without premature wrapping
+    $targetWidth = [math]::Floor($availWidth / $cols) - 12
+    if ($targetWidth -lt 280 -and $cols -gt 1) {
+        $cols = [int]($cols - 1)
+        $targetWidth = [math]::Floor($availWidth / $cols) - 12
+    }
     if ($targetWidth -lt 280) { $targetWidth = 280 }
+
+    # Batch layout update to prevent flickering and stuttering on high-resolution screens
+    if ($activePanel) { $activePanel.SuspendLayout() }
 
     foreach ($card in $script:AllCards) {
         if ($card.Panel.Width -ne $targetWidth) {
             $card.Panel.Width = $targetWidth
         }
     }
+
+    # Update category banner headers to span full width
+    foreach ($p in $script:CategoryPanels.Values) {
+        if ($p) {
+            foreach ($ctrl in $p.Controls) {
+                if ($ctrl.Tag -eq "Banner") {
+                    $ctrl.Width = [math]::Max(400, $availWidth)
+                }
+            }
+        }
+    }
+
+    if ($activePanel) { $activePanel.ResumeLayout($true) }
 }
 $ViewContainer.Add_SizeChanged({ Update-ResponsiveLayout })
 
@@ -834,7 +899,7 @@ $TabList = @(
     @{ Id = "Privacy";   Icon = $UI.Privacy;  Name = "Privacy & Bloat"; Desc = "Telemetry removal, Bing search, Recall AI & Lock Screen Ads" },
     @{ Id = "Context";   Icon = $UI.Context;  Name = "Shell & Explorer";Desc = "Classic Context Menus, File extensions, Compact Mode & Pro Tools" },
     @{ Id = "Hardware";  Icon = $UI.Hardware; Name = "Hardware Audit";  Desc = "SMART Disk health, BIOS/UEFI, RAM Module speeds & GPU Specs" },
-    @{ Id = "Apps";      Icon = $UI.Apps;     Name = "Software Hub";    Desc = "Winget package updater, WinToys, VLC, SumatraPDF & SysAdmin Bundles" },
+    @{ Id = "Apps";      Icon = $UI.Apps;     Name = "Software Hub";    Desc = "AdminWorks updater, Winget package updater, WinToys, VLC & SysAdmin Bundles" },
     @{ Id = "Admin";     Icon = $UI.Admin;    Name = "Admin Utilities"; Desc = "Master GodMode, License audit, Open shares & Windows Admin Consoles" }
 )
 
@@ -881,7 +946,7 @@ foreach ($tab in $TabList) {
     # Category Section Banner Header
     $Banner = New-Object System.Windows.Forms.FlowLayoutPanel -Property @{
         Height        = 34
-        Width         = 1200
+        Width         = 4000
         FlowDirection = "LeftToRight"
         WrapContents  = $false
         BackColor     = [System.Drawing.Color]::Transparent
@@ -914,6 +979,8 @@ foreach ($tab in $TabList) {
     }
     $Banner.Controls.AddRange(@($BannerIcon, $BannerTitle, $BannerDesc))
     $Flow.Controls.Add($Banner)
+    $Flow.SetFlowBreak($Banner, $true)
+    Enable-DoubleBuffering $Flow
 
     # Sidebar Item Panel
     $ItemPanel = New-Object System.Windows.Forms.Panel -Property @{
@@ -1360,7 +1427,7 @@ New-ToggleCard $P_Privacy $UI.Search "Disable Copilot & Web Search" "Windows 11 
         reg delete "HKCU\Software\Policies\Microsoft\Windows\WindowsCopilot" /v "TurnOffWindowsCopilot" /f 2>$null | Out-Null
         reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v "TaskbarDa" /t REG_DWORD /d 1 /f | Out-Null
         reg delete "HKCU\Software\Policies\Microsoft\Windows\Explorer" /v "DisableSearchBoxSuggestions" /f 2>$null | Out-Null
-        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\SearchSettings" /v "IsDynamicSearchBoxEnabled" /t REG_DWORD /d 0 /f | Out-Null
+        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\SearchSettings" /v "IsDynamicSearchBoxEnabled" /t REG_DWORD /d 1 /f | Out-Null
         Write-Log "Windows Copilot and Search Suggestions restored." "Warning"
     }
 
@@ -1587,6 +1654,93 @@ New-TweakCard $P_Hw $UI.Disk "Disk Sector & Partition Audit" "Drive Specs" "Audi
 # ------------------------------------------------------------------------------
 $P_Apps = $script:CategoryPanels["Apps"]
 
+New-TweakCard $P_Apps $UI.Refresh "Update AdminWorks (AdminWorks.exe)" "Software Update" "Downloads and updates AdminWorks.exe from the latest GitHub release (KushagraKarira/AdminWorks)." {
+    Write-Log "Checking for AdminWorks update from GitHub Releases..." "Exec"
+    $repo = "KushagraKarira/AdminWorks"
+    $releasesPage = "https://github.com/$repo/releases"
+    $downloadUrl = "https://github.com/$repo/releases/latest/download/AdminWorks.exe"
+    $apiUrl = "https://api.github.com/repos/$repo/releases/latest"
+
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+
+    try {
+        $headers = @{ "User-Agent" = "AdminWorks-Updater" }
+        $releaseInfo = Invoke-RestMethod -Uri $apiUrl -Headers $headers -TimeoutSec 8 -ErrorAction Stop
+        if ($releaseInfo.tag_name) {
+            Write-Log "Found latest release on GitHub: $($releaseInfo.tag_name)" "Info"
+            $asset = $releaseInfo.assets | Where-Object { $_.name -ieq "AdminWorks.exe" } | Select-Object -First 1
+            if ($asset -and $asset.browser_download_url) {
+                $downloadUrl = $asset.browser_download_url
+            }
+        }
+    } catch {
+        Write-Log "Notice: GitHub API lookup skipped ($($_.Exception.Message))." "Warning"
+        Write-Log "Proceeding with direct release download from: $downloadUrl" "Info"
+    }
+
+    $currentProc = Get-Process -Id $PID -ErrorAction SilentlyContinue
+    $isExe = ($currentProc -and ($currentProc.ProcessName -ieq "AdminWorks"))
+    $targetDir = [Environment]::GetFolderPath("Desktop")
+    $targetExe = Join-Path $targetDir "AdminWorks.exe"
+
+    if ($isExe -and $currentProc.MainModule.FileName) {
+        $targetExe = $currentProc.MainModule.FileName
+        $targetDir = Split-Path -Parent $targetExe
+    } elseif ($PSScriptRoot -and (Test-Path $PSScriptRoot)) {
+        $targetExe = Join-Path $PSScriptRoot "AdminWorks.exe"
+    }
+
+    $tempExe = Join-Path $env:TEMP "AdminWorks_update.exe"
+    if (Test-Path $tempExe) { Remove-Item $tempExe -Force -ErrorAction SilentlyContinue }
+
+    Write-Log "Downloading latest AdminWorks.exe from release page..." "Warning"
+    try {
+        Invoke-WebRequest -Uri $downloadUrl -OutFile $tempExe -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
+    } catch {
+        Write-Log "Download failed: $($_.Exception.Message)" "Error"
+        Write-Log "Opening official GitHub releases page in browser..." "Warning"
+        Start-Process $releasesPage
+        return
+    }
+
+    if (-not (Test-Path $tempExe) -or (Get-Item $tempExe).Length -lt 10240) {
+        Write-Log "Downloaded binary is missing or invalid. Navigating to releases page..." "Error"
+        Start-Process $releasesPage
+        return
+    }
+
+    $fileSizeMB = [math]::Round((Get-Item $tempExe).Length / 1MB, 2)
+    Write-Log "AdminWorks.exe downloaded successfully ($fileSizeMB MB)." "Success"
+
+    if ($isExe) {
+        Write-Log "Applying in-place executable replacement and restarting AdminWorks..." "Exec"
+        $batchLines = @(
+            '@echo off',
+            'timeout /t 2 /nobreak >nul',
+            'taskkill /f /im AdminWorks.exe >nul 2>&1',
+            "move /y `"$tempExe`" `"$targetExe`" >nul",
+            "start `"`" `"$targetExe`"",
+            'del "%~f0"'
+        )
+        $batchFile = Join-Path $env:TEMP "update_adminworks.bat"
+        $batchLines | Set-Content -Path $batchFile -Force
+        Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$batchFile`"" -WindowStyle Hidden
+        Write-Log "Update scheduled. AdminWorks will restart momentarily." "Success"
+    } else {
+        Copy-Item -Path $tempExe -Destination $targetExe -Force
+        Remove-Item -Path $tempExe -Force -ErrorAction SilentlyContinue
+        Write-Log "AdminWorks.exe updated and saved to: $targetExe" "Success"
+        Write-Log "Opening file location in File Explorer..." "Info"
+        Start-Process "explorer.exe" -ArgumentList "/select,`"$targetExe`""
+    }
+}
+
+New-TweakCard $P_Apps $UI.Net "AdminWorks Release Page" "GitHub Releases" "Opens the official GitHub releases page to inspect release notes, changelogs, and binary assets." {
+    Write-Log "Opening AdminWorks GitHub Releases..." "Exec"
+    Start-Process "https://github.com/KushagraKarira/AdminWorks/releases"
+    Write-Log "Navigated to: https://github.com/KushagraKarira/AdminWorks/releases" "Success"
+}
+
 New-TweakCard $P_Apps $UI.Apps "Install / Repair Winget" "Package Manager" "Downloads and forces the installation of the latest Microsoft App Installer (Winget)." {
     Write-Log "Downloading latest Winget MSIX Bundle from Microsoft..." "Warning"
     $url = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
@@ -1682,6 +1836,87 @@ New-TweakCard $P_Apps $UI.Shield "Install SysAdmin Bundle" "Winget Bundle" "Inst
 # 9. ADMIN UTILITIES
 # ------------------------------------------------------------------------------
 $P_Admin = $script:CategoryPanels["Admin"]
+
+New-TweakCard $P_Admin $UI.Refresh "Check for AdminWorks Updates" "Suite Update" "Checks GitHub Releases (KushagraKarira/AdminWorks) and updates AdminWorks.exe to the latest release." {
+    Write-Log "Checking for AdminWorks update from GitHub Releases..." "Exec"
+    $repo = "KushagraKarira/AdminWorks"
+    $releasesPage = "https://github.com/$repo/releases"
+    $downloadUrl = "https://github.com/$repo/releases/latest/download/AdminWorks.exe"
+    $apiUrl = "https://api.github.com/repos/$repo/releases/latest"
+
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+
+    try {
+        $headers = @{ "User-Agent" = "AdminWorks-Updater" }
+        $releaseInfo = Invoke-RestMethod -Uri $apiUrl -Headers $headers -TimeoutSec 8 -ErrorAction Stop
+        if ($releaseInfo.tag_name) {
+            Write-Log "Found latest release on GitHub: $($releaseInfo.tag_name)" "Info"
+            $asset = $releaseInfo.assets | Where-Object { $_.name -ieq "AdminWorks.exe" } | Select-Object -First 1
+            if ($asset -and $asset.browser_download_url) {
+                $downloadUrl = $asset.browser_download_url
+            }
+        }
+    } catch {
+        Write-Log "Notice: GitHub API lookup skipped ($($_.Exception.Message))." "Warning"
+        Write-Log "Proceeding with direct release download from: $downloadUrl" "Info"
+    }
+
+    $currentProc = Get-Process -Id $PID -ErrorAction SilentlyContinue
+    $isExe = ($currentProc -and ($currentProc.ProcessName -ieq "AdminWorks"))
+    $targetDir = [Environment]::GetFolderPath("Desktop")
+    $targetExe = Join-Path $targetDir "AdminWorks.exe"
+
+    if ($isExe -and $currentProc.MainModule.FileName) {
+        $targetExe = $currentProc.MainModule.FileName
+        $targetDir = Split-Path -Parent $targetExe
+    } elseif ($PSScriptRoot -and (Test-Path $PSScriptRoot)) {
+        $targetExe = Join-Path $PSScriptRoot "AdminWorks.exe"
+    }
+
+    $tempExe = Join-Path $env:TEMP "AdminWorks_update.exe"
+    if (Test-Path $tempExe) { Remove-Item $tempExe -Force -ErrorAction SilentlyContinue }
+
+    Write-Log "Downloading latest AdminWorks.exe from release page..." "Warning"
+    try {
+        Invoke-WebRequest -Uri $downloadUrl -OutFile $tempExe -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
+    } catch {
+        Write-Log "Download failed: $($_.Exception.Message)" "Error"
+        Write-Log "Opening official GitHub releases page in browser..." "Warning"
+        Start-Process $releasesPage
+        return
+    }
+
+    if (-not (Test-Path $tempExe) -or (Get-Item $tempExe).Length -lt 10240) {
+        Write-Log "Downloaded binary is missing or invalid. Navigating to releases page..." "Error"
+        Start-Process $releasesPage
+        return
+    }
+
+    $fileSizeMB = [math]::Round((Get-Item $tempExe).Length / 1MB, 2)
+    Write-Log "AdminWorks.exe downloaded successfully ($fileSizeMB MB)." "Success"
+
+    if ($isExe) {
+        Write-Log "Applying in-place executable replacement and restarting AdminWorks..." "Exec"
+        $batchLines = @(
+            '@echo off',
+            'timeout /t 2 /nobreak >nul',
+            'taskkill /f /im AdminWorks.exe >nul 2>&1',
+            "move /y `"$tempExe`" `"$targetExe`" >nul",
+            "start `"`" `"$targetExe`"",
+            'del "%~f0"'
+        )
+        $batchFile = Join-Path $env:TEMP "update_adminworks.bat"
+        $batchLines | Set-Content -Path $batchFile -Force
+        Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$batchFile`"" -WindowStyle Hidden
+        Write-Log "Update scheduled. AdminWorks will restart momentarily." "Success"
+    } else {
+        Copy-Item -Path $tempExe -Destination $targetExe -Force
+        Remove-Item -Path $tempExe -Force -ErrorAction SilentlyContinue
+        Write-Log "AdminWorks.exe updated and saved to: $targetExe" "Success"
+        Write-Log "Opening file location in File Explorer..." "Info"
+        Start-Process "explorer.exe" -ArgumentList "/select,`"$targetExe`""
+    }
+}
 
 New-TweakCard $P_Admin $UI.Shield "Create System Restore Point" "Safety Checkpoint" "Generates a fresh Windows System Restore point named 'AdminWorks_Checkpoint'." {
     Write-Log "Creating Windows System Restore Point..." "Exec"
