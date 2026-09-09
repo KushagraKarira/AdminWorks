@@ -16,9 +16,9 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # --- [OS Version Detection Helper] ---
 $script:AppVersion = "5.3"
-$script:OSBuild = [Environment]::OSVersion.Version.Build
-$script:IsWin11 = ($script:OSBuild -ge 22000)
-$script:IsWin10 = ($script:OSBuild -ge 10240 -and $script:OSBuild -lt 22000)
+$script:OSBuild    = [Environment]::OSVersion.Version.Build
+$script:IsWin11    = ($script:OSBuild -ge 22000)
+$script:IsWin10    = ($script:OSBuild -ge 10240 -and $script:OSBuild -lt 22000)
 
 # --- [High-DPI Scaling & Native Windows DWM Helpers] ---
 if (-not ([System.Management.Automation.PSTypeName]'NativeMethods').Type) {
@@ -51,7 +51,7 @@ public class NativeMethods {
 }
 
 try {
-    # Per-Monitor V2 DPI Awareness (-4) for sharp text/UI rendering on 1080p, 1440p, 4K, and high-DPI displays
+    # Per-Monitor V2 DPI Awareness (-4) for sharp text/UI rendering on all display resolutions
     if (-not [NativeMethods]::SetProcessDpiAwarenessContext([IntPtr](-4))) {
         try { [NativeMethods]::SetProcessDpiAwareness(2) | Out-Null } catch { [NativeMethods]::SetProcessDPIAware() | Out-Null }
     }
@@ -139,6 +139,15 @@ $UI = @{
 
 $SearchPlaceholder = "Search tools, tweaks & features..."
 
+# Shared Path Resolution Helper
+function Get-UserDesktopPath {
+    $desk = [Environment]::GetFolderPath("Desktop")
+    if (-not (Test-Path $desk)) {
+        $desk = if ($env:USERPROFILE) { "$env:USERPROFILE\Desktop" } else { $env:TEMP }
+    }
+    return $desk
+}
+
 # Backup Directory Setup - Lightweight IO check
 $script:BackupDir = "$env:LOCALAPPDATA\AdminWorks\Backups"
 if (-not [System.IO.Directory]::Exists($script:BackupDir)) {
@@ -179,7 +188,7 @@ try {
     }
 } catch {}
 
-# --- [Header: Structured, Non-Overlapping Layout] ---
+# --- [Header: Structured Layout] ---
 $Header = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Top"
     Height    = 66
@@ -222,7 +231,7 @@ $RightHeader = New-Object System.Windows.Forms.Panel -Property @{
     BackColor = $script:Theme.Header
 }
 
-# Window Control Box (Docked to far right inside $RightHeader)
+# Window Control Box
 $CtrlBox = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Right"
     Width     = 135
@@ -257,7 +266,7 @@ $BtnMax   = New-WindowBtn $UI.Maximize 46 $script:Theme.CardHover {
 }
 $BtnMin   = New-WindowBtn $UI.Minimize 4 $script:Theme.CardHover { $Form.WindowState = "Minimized" }
 
-# Search Container (Docked to the left of window buttons)
+# Search Container
 $SearchWrapper = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Fill"
     Padding   = New-Object System.Windows.Forms.Padding(6, 16, 12, 16)
@@ -303,7 +312,6 @@ $CenterPanel = New-Object System.Windows.Forms.Panel -Property @{
     BackColor = $script:Theme.Header
     Padding   = New-Object System.Windows.Forms.Padding(12, 0, 12, 0)
 }
-# Instant zero-overhead OS identification from Registry (avoids heavy WMI/CIM startup penalty)
 $OSCaption = try {
     (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -ErrorAction SilentlyContinue).ProductName
 } catch { "Windows $(if ($script:IsWin11) { '11' } else { '10' })" }
@@ -311,7 +319,9 @@ if (-not $OSCaption) { $OSCaption = "Windows $(if ($script:IsWin11) { '11' } els
 
 $LocalIP = "Scanning..."
 try {
-    $dnsIP = [System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName()) | Where-Object { $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork -and -not [System.Net.IPAddress]::IsLoopback($_) } | Select-Object -First 1
+    $dnsIP = [System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName()) | Where-Object { 
+        $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork -and -not [System.Net.IPAddress]::IsLoopback($_) 
+    } | Select-Object -First 1
     if ($dnsIP) { $LocalIP = $dnsIP.IPAddressToString } else { $LocalIP = "LAN" }
 } catch { $LocalIP = "Offline" }
 
@@ -349,7 +359,7 @@ $BrandPanel.Add_MouseDown($dragHandler)
 $CenterPanel.Add_MouseDown($dragHandler)
 $SysBadge.Add_MouseDown($dragHandler)
 
-# Double-click header to toggle maximize / restore on large displays
+# Double-click header to toggle maximize / restore
 $doubleClickHandler = {
     if ($Form.WindowState -eq "Maximized") { 
         $Form.WindowState = "Normal"
@@ -462,8 +472,7 @@ $BtnToggleDrawer.Add_Click({
 
 $TermBtnContainer.Controls.Add($BtnToggleDrawer)
 New-TermBtn "EXPORT" { 
-    $desk = [Environment]::GetFolderPath("Desktop")
-    if (-not (Test-Path $desk)) { $desk = if ($env:USERPROFILE) { "$env:USERPROFILE\Desktop" } else { $env:TEMP } }
+    $desk = Get-UserDesktopPath
     $Path = Join-Path $desk "AdminWorks_Log_$((Get-Date).ToString('yyyy-MM-dd_HHmmss')).txt"
     $content = if ([string]::IsNullOrWhiteSpace($LogBox.Text)) { "AdminWorks Execution Log - Empty" } else { $LogBox.Text }
     $content | Out-File -FilePath $Path -Encoding UTF8
@@ -481,19 +490,23 @@ New-TermBtn "CLEAR" { $LogBox.Clear(); Write-Log "Console cleared." "Info" }
 
 function Write-Log ($Msg, $Type = "Info") {
     if ([string]::IsNullOrWhiteSpace($Msg)) { return }
-    [void]$LogBox.Invoke([Action[string, string]]{
-        param($m, $t)
-        $LogBox.SelectionStart = $LogBox.TextLength
-        $LogBox.SelectionColor = switch ($t) {
-            "Success" { $script:Theme.Success }
-            "Warning" { $script:Theme.Warning }
-            "Error"   { $script:Theme.Danger }
-            "Exec"    { $script:Theme.AccentGlow }
-            Default   { $script:Theme.TextMuted }
-        }
-        $LogBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [$($t.ToUpper().PadRight(7))] $m`n")
-        $LogBox.ScrollToCaret()
-    }, $Msg, $Type)
+    if (-not $LogBox -or $LogBox.IsDisposed) { return }
+    try {
+        [void]$LogBox.Invoke([System.Action[string, string]]{
+            param($m, $t)
+            if (-not $LogBox -or $LogBox.IsDisposed) { return }
+            $LogBox.SelectionStart = $LogBox.TextLength
+            $LogBox.SelectionColor = switch ($t) {
+                "Success" { $script:Theme.Success }
+                "Warning" { $script:Theme.Warning }
+                "Error"   { $script:Theme.Danger }
+                "Exec"    { $script:Theme.AccentGlow }
+                Default   { $script:Theme.TextMuted }
+            }
+            $LogBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [$($t.ToUpper().PadRight(7))] $m`n")
+            $LogBox.ScrollToCaret()
+        }, $Msg, $Type)
+    } catch {}
 }
 
 # --- [Central Work Area & Telemetry] ---
@@ -583,15 +596,16 @@ $StatRAM  = New-StatWidget $UI.Ram "MEMORY USED"
 $StatDisk = New-StatWidget $UI.Disk "SYSTEM DRIVE (C:)"
 $StatUp   = New-StatWidget $UI.Uptime "SYSTEM UPTIME"
 
-# High-Performance CPU Counter (lazily initialized on first telemetry tick to avoid launch delay)
+# High-Performance CPU Counter (lazily initialized on first telemetry tick)
 $script:CpuCounter = $null
+$script:CpuCounterUnavailable = $false
 
 # --- [Card Engine & Registration Setup] ---
-$script:AllCards = New-Object System.Collections.Generic.List[PSObject]
-$script:ToggleCards = New-Object System.Collections.Generic.List[PSObject]
+$script:AllCards       = New-Object System.Collections.Generic.List[PSObject]
+$script:ToggleCards    = New-Object System.Collections.Generic.List[PSObject]
 $script:CategoryPanels = @{}
-$script:SidebarItems = @{}
-$script:CurrentTabId = "Presets"
+$script:SidebarItems   = @{}
+$script:CurrentTabId   = "Presets"
 
 $ViewContainer = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Fill"
@@ -610,7 +624,6 @@ function Update-ResponsiveLayout {
     if ($availWidth -lt 280) { $availWidth = 280 }
 
     # Dynamically scale columns for large screens (1080p, 1440p, 4K, 5K, ultrawide)
-    # Target slot width around 320-350px per card (including 12px margins)
     $cols = [math]::Max(1, [math]::Floor($availWidth / 330))
     if ($cols -gt 16) { $cols = 16 }
 
@@ -665,19 +678,124 @@ function Invoke-AdminWorksAction ($ActionCode, $Button, [scriptblock]$OnComplete
         
         function Write-Log ($Msg, $Type = "Info") {
             if ([string]::IsNullOrWhiteSpace($Msg)) { return }
-            [void]$LogBox.Invoke([Action[string, string]]{
-                param($m, $t)
-                $LogBox.SelectionStart = $LogBox.TextLength
-                $LogBox.SelectionColor = switch ($t) {
-                    "Success" { $Theme.Success }
-                    "Warning" { $Theme.Warning }
-                    "Error"   { $Theme.Danger }
-                    "Exec"    { $Theme.AccentGlow }
-                    Default   { $Theme.TextMuted }
+            if (-not $LogBox -or $LogBox.IsDisposed) { return }
+            try {
+                [void]$LogBox.Invoke([System.Action[string, string]]{
+                    param($m, $t)
+                    if (-not $LogBox -or $LogBox.IsDisposed) { return }
+                    $LogBox.SelectionStart = $LogBox.TextLength
+                    $LogBox.SelectionColor = switch ($t) {
+                        "Success" { $Theme.Success }
+                        "Warning" { $Theme.Warning }
+                        "Error"   { $Theme.Danger }
+                        "Exec"    { $Theme.AccentGlow }
+                        Default   { $Theme.TextMuted }
+                    }
+                    $LogBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [$($t.ToUpper().PadRight(7))] $m`n")
+                    $LogBox.ScrollToCaret()
+                }, $Msg, $Type)
+            } catch {}
+        }
+
+        # Shared Helper: Clean File Explorer restart
+        function Restart-Explorer {
+            Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Milliseconds 600
+            if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe }
+        }
+
+        # Shared Helper: Activate Ultimate Performance scheme
+        function Set-PowerSchemeUltimate {
+            $planOut = powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null
+            if ($planOut -match '([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})') {
+                powercfg /setactive $matches[1] | Out-Null
+            } else {
+                powercfg /setactive e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null | Out-Null
+            }
+        }
+
+        # Shared Helper: Unified Suite Updater
+        function Update-AdminWorksSuite {
+            Write-Log "Checking for AdminWorks update from GitHub Releases..." "Exec"
+            $repo = "KushagraKarira/AdminWorks"
+            $releasesPage = "https://github.com/$repo/releases"
+            $downloadUrl = "https://github.com/$repo/releases/latest/download/AdminWorks.exe"
+            $apiUrl = "https://api.github.com/repos/$repo/releases/latest"
+
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+
+            try {
+                $headers = @{ "User-Agent" = "AdminWorks-Updater" }
+                $releaseInfo = Invoke-RestMethod -Uri $apiUrl -Headers $headers -TimeoutSec 8 -ErrorAction Stop
+                if ($releaseInfo.tag_name) {
+                    Write-Log "Found latest release on GitHub: $($releaseInfo.tag_name)" "Info"
+                    $asset = $releaseInfo.assets | Where-Object { $_.name -ieq "AdminWorks.exe" } | Select-Object -First 1
+                    if ($asset -and $asset.browser_download_url) {
+                        $downloadUrl = $asset.browser_download_url
+                    }
                 }
-                $LogBox.AppendText("[$((Get-Date).ToString('HH:mm:ss'))] [$($t.ToUpper().PadRight(7))] $m`n")
-                $LogBox.ScrollToCaret()
-            }, $Msg, $Type)
+            } catch {
+                Write-Log "Notice: GitHub API lookup skipped ($($_.Exception.Message))." "Warning"
+                Write-Log "Proceeding with direct release download from: $downloadUrl" "Info"
+            }
+
+            $currentProc = Get-Process -Id $PID -ErrorAction SilentlyContinue
+            $isExe = ($currentProc.MainModule.FileName -match "\.exe$" -and $currentProc.ProcessName -notmatch "^(powershell|pwsh|powershell_ise)$")
+            $targetDir = [Environment]::GetFolderPath("Desktop")
+            if (-not (Test-Path $targetDir)) { $targetDir = if ($env:USERPROFILE) { "$env:USERPROFILE\Desktop" } else { $env:TEMP } }
+            
+            if ($isExe -and $currentProc.MainModule.FileName) {
+                $targetExe = $currentProc.MainModule.FileName
+                $targetDir = Split-Path -Parent $targetExe
+            } elseif ($PSScriptRoot -and (Test-Path $PSScriptRoot)) {
+                $targetExe = Join-Path $PSScriptRoot "AdminWorks.exe"
+            } else {
+                $targetExe = Join-Path $targetDir "AdminWorks.exe"
+            }
+
+            $tempExe = Join-Path $env:TEMP "AdminWorks_update_$($PID).exe"
+            if (Test-Path $tempExe) { Remove-Item $tempExe -Force -ErrorAction SilentlyContinue }
+
+            Write-Log "Downloading latest AdminWorks.exe from release page..." "Warning"
+            try {
+                Invoke-WebRequest -Uri $downloadUrl -OutFile $tempExe -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
+            } catch {
+                Write-Log "Download failed: $($_.Exception.Message)" "Error"
+                Write-Log "Opening official GitHub releases page in browser..." "Warning"
+                Start-Process $releasesPage
+                return
+            }
+
+            if (-not (Test-Path $tempExe) -or (Get-Item $tempExe).Length -lt 10240) {
+                Write-Log "Downloaded binary is missing or invalid. Navigating to releases page..." "Error"
+                Start-Process $releasesPage
+                return
+            }
+
+            $fileSizeMB = [math]::Round((Get-Item $tempExe).Length / 1MB, 2)
+            Write-Log "AdminWorks.exe downloaded successfully ($fileSizeMB MB)." "Success"
+
+            if ($isExe) {
+                Write-Log "Applying in-place executable replacement and restarting AdminWorks..." "Exec"
+                $batchLines = @(
+                    '@echo off',
+                    'timeout /t 2 /nobreak >nul',
+                    "taskkill /f /pid $($currentProc.Id) >nul 2>&1",
+                    "move /y `"$tempExe`" `"$targetExe`" >nul",
+                    "start `"`" `"$targetExe`"",
+                    '(goto) 2>nul & del "%~f0"'
+                )
+                $batchFile = Join-Path $env:TEMP "update_adminworks_$($PID).bat"
+                $batchLines | Set-Content -Path $batchFile -Force
+                Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$batchFile`"" -WindowStyle Hidden
+                Write-Log "Update scheduled. AdminWorks will restart momentarily." "Success"
+            } else {
+                Copy-Item -Path $tempExe -Destination $targetExe -Force
+                Remove-Item -Path $tempExe -Force -ErrorAction SilentlyContinue
+                Write-Log "AdminWorks.exe updated and saved to: $targetExe" "Success"
+                Write-Log "Opening file location in File Explorer..." "Info"
+                Start-Process "explorer.exe" -ArgumentList "/select,`"$targetExe`""
+            }
         }
 
         try {
@@ -700,18 +818,19 @@ function Invoke-AdminWorksAction ($ActionCode, $Button, [scriptblock]$OnComplete
     $Timer.Add_Tick({
         $State = $this.Tag
         if ($State.PS.InvocationStateInfo.State -ne "Running") {
-            $State.Button.Enabled = $true
-            if ($State.OnComplete) {
-                & $State.OnComplete $State.Button
-            } else {
-                $State.Button.Text = "DONE"
-                $State.Button.BackColor = $script:Theme.Success
-                $State.Button.ForeColor = [System.Drawing.Color]::White
+            if ($State.Button -and -not $State.Button.IsDisposed) {
+                $State.Button.Enabled = $true
+                if ($State.OnComplete) {
+                    & $State.OnComplete $State.Button
+                } else {
+                    $State.Button.Text = "DONE"
+                    $State.Button.BackColor = $script:Theme.Success
+                    $State.Button.ForeColor = [System.Drawing.Color]::White
+                }
             }
 
-            $State.PS.Dispose()
-            $State.Runspace.Close()
-            $State.Runspace.Dispose()
+            try { $State.PS.Dispose() } catch {}
+            try { $State.Runspace.Close(); $State.Runspace.Dispose() } catch {}
 
             $this.Stop()
             $this.Dispose()
@@ -726,6 +845,7 @@ function New-BaseCardPanel ($CategoryPanel, $CategoryTag, $IconGlyph, $Title, $D
         Size      = New-Object System.Drawing.Size(320, 154)
         BackColor = $script:Theme.Card
         Margin    = New-Object System.Windows.Forms.Padding(6)
+        Tag       = [PSCustomObject]@{ IsHovered = $false }
     }
 
     $tagText = if ($IsToggle) { "$($CategoryTag.ToUpper())  $($UI.Bullet)  TOGGLE" } else { $CategoryTag.ToUpper() }
@@ -770,7 +890,8 @@ function New-BaseCardPanel ($CategoryPanel, $CategoryTag, $IconGlyph, $Title, $D
     # Crisp uniform card border with hover glow
     $P.Add_Paint({
         param($s, $e)
-        $borderColor = if ($s.Tag -and $s.Tag.IsHovered) { $script:Theme.AccentGlow } else { $script:Theme.CardBorder }
+        $isHovered = ($s.Tag -and $s.Tag.IsHovered)
+        $borderColor = if ($isHovered) { $script:Theme.AccentGlow } else { $script:Theme.CardBorder }
         $rect = New-Object System.Drawing.Rectangle(0, 0, ($s.Width - 1), ($s.Height - 1))
         $pen = New-Object System.Drawing.Pen($borderColor, 1)
         $e.Graphics.DrawRectangle($pen, $rect)
@@ -779,14 +900,13 @@ function New-BaseCardPanel ($CategoryPanel, $CategoryTag, $IconGlyph, $Title, $D
 
     $P.Add_MouseEnter({ 
         $this.BackColor = $script:Theme.CardHover
-        if (-not $this.Tag -or $this.Tag -isnot [hashtable]) { $this.Tag = @{} }
-        $this.Tag.IsHovered = $true
+        if ($this.Tag -and $this.Tag.PSObject.Properties['IsHovered']) { $this.Tag.IsHovered = $true }
         $this.Invalidate()
         if ($CategoryPanel -and $CategoryPanel.CanFocus) { [void]$CategoryPanel.Focus() }
     })
     $P.Add_MouseLeave({ 
         $this.BackColor = $script:Theme.Card
-        if ($this.Tag -and $this.Tag -is [hashtable]) { $this.Tag.IsHovered = $false }
+        if ($this.Tag -and $this.Tag.PSObject.Properties['IsHovered']) { $this.Tag.IsHovered = $false }
         $this.Invalidate()
     })
 
@@ -870,6 +990,7 @@ function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc
 
     $ToggleMeta = [PSCustomObject]@{
         Button        = $Btn
+        CheckAction   = $CheckAction
         EnableCode    = $EnableAction.ToString()
         DisableCode   = $DisableAction.ToString()
         IsActive      = $false
@@ -993,7 +1114,7 @@ foreach ($tab in $TabList) {
     $Flow.SetFlowBreak($Banner, $true)
     Enable-DoubleBuffering $Flow
 
-    # Strictly suppress horizontal scroll and hide visible scrollbar while maintaining vertical mouse-wheel scrolling
+    # Strictly suppress horizontal scroll and hide visible scrollbar
     $Flow.HorizontalScroll.Enabled = $false
     $Flow.HorizontalScroll.Visible = $false
     $Flow.HorizontalScroll.Maximum = 0
@@ -1161,7 +1282,7 @@ $SearchBox.Add_TextChanged({
         $script:CurrentTabId = $targetTab
     }
 
-    # ENSURE ONLY ONE CATEGORY PANEL IS EVER VISIBLE (never stack multiple Dock=Fill panels)
+    # Ensure only the target tab panel is visible
     foreach ($k in $script:CategoryPanels.Keys) {
         $script:CategoryPanels[$k].Visible = ($k -eq $targetTab)
     }
@@ -1192,12 +1313,7 @@ $P_Presets = $script:CategoryPanels["Presets"]
 
 New-TweakCard $P_Presets $UI.Sparkle "Gamer Mode Profile" "Preset Profile" "Applies Ultimate Power Plan, disables GameDVR, prioritizes foreground threads & frees RAM." {
     Write-Log "Applying GAMER MODE PRESET..." "Warning"
-    $planOut = powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null
-    if ($planOut -match '([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})') {
-        powercfg /setactive $matches[1] | Out-Null
-    } else {
-        powercfg /setactive e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null | Out-Null
-    }
+    Set-PowerSchemeUltimate
     Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value "0" 
     reg add "HKCU\System\GameConfigStore" /v "GameDVR_Enabled" /t REG_DWORD /d 0 /f | Out-Null
     reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\GameDVR" /v "AllowGameDVR" /t REG_DWORD /d 0 /f | Out-Null
@@ -1216,8 +1332,8 @@ New-TweakCard $P_Presets $UI.Shield "Privacy Lockdown" "Preset Profile" "Disable
     reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Search" /v "BingSearchEnabled" /t REG_DWORD /d 0 /f | Out-Null
     reg add "HKLM\SOFTWARE\Policies\Microsoft\Edge" /v "BackgroundModeEnabled" /t REG_DWORD /d 0 /f | Out-Null
     
-    $EnvWin11 = ([Environment]::OSVersion.Version.Build -ge 22000)
-    if ($EnvWin11 -and (Get-WindowsOptionalFeature -Online -FeatureName "Recall" -ErrorAction SilentlyContinue)) {
+    $isWin11 = ([Environment]::OSVersion.Version.Build -ge 22000)
+    if ($isWin11 -and (Get-WindowsOptionalFeature -Online -FeatureName "Recall" -ErrorAction SilentlyContinue)) {
         Disable-WindowsOptionalFeature -Online -FeatureName "Recall" -Remove -NoRestart -ErrorAction SilentlyContinue | Out-Null
     }
     Write-Log "Privacy Lockdown successfully enforced." "Success"
@@ -1225,23 +1341,23 @@ New-TweakCard $P_Presets $UI.Shield "Privacy Lockdown" "Preset Profile" "Disable
 
 New-TweakCard $P_Presets $UI.Building "Clean Workstation" "Preset Profile" "Removes consumer bloat, restores classic context menu, disables SMB signing for max speed & oplocks." {
     Write-Log "Applying CLEAN WORKSTATION PRESET..." "Warning"
-    $EnvWin11 = ([Environment]::OSVersion.Version.Build -ge 22000)
-    if ($EnvWin11) {
+    $isWin11 = ([Environment]::OSVersion.Version.Build -ge 22000)
+    if ($isWin11) {
         reg add "HKCU\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" /f /ve | Out-Null
     }
     Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -Value 0
     Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Hidden" -Value 1
-    Set-SmbClientConfiguration -EnableSecuritySignature $false -Force
-    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "EnableOplocks" -Value 0
-    Stop-Process -Name explorer -Force
-    Start-Sleep -Milliseconds 600
-    if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe }
+    Set-SmbClientConfiguration -EnableSecuritySignature $false -Force -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "EnableOplocks" -Value 0 -ErrorAction SilentlyContinue
+    Restart-Explorer
     Write-Log "Clean Workstation configured." "Success"
 }
 
 New-TweakCard $P_Presets $UI.Refresh "Express Maintenance" "Preset Profile" "Runs SSD ReTrim, clears Temp caches, flushes standby RAM & forces Windows time resync." {
     Write-Log "Running EXPRESS MAINTENANCE ROUTINE..." "Warning"
     foreach ($d in @("C", "D")) { if (Test-Path "$d`:\") { Optimize-Volume -DriveLetter $d -ReTrim -Defrag -Verbose 4>&1 | Out-Null } }
+    Remove-Item "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item "$env:SystemRoot\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
     cleanmgr /sagerun:1 | Out-Null
     [System.GC]::Collect()
     Start-Service w32time -ErrorAction SilentlyContinue
@@ -1292,7 +1408,7 @@ New-TweakCard $P_Maint $UI.Refresh "Reset Windows Update" "Update Repair" "Purge
 
 New-TweakCard $P_Maint $UI.Context "Rebuild Icon & Font Cache" "Explorer Repair" "Clears corrupted thumbnail, font, and Windows Explorer icon databases." {
     Write-Log "Rebuilding icon and font cache..." "Exec"
-    Stop-Process -Name explorer -Force
+    Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
     Remove-Item "$env:LOCALAPPDATA\IconCache.db" -Force -ErrorAction SilentlyContinue
     Remove-Item "$env:LOCALAPPDATA\Microsoft\Windows\Explorer\iconcache*" -Force -ErrorAction SilentlyContinue
     Remove-Item "$env:LOCALAPPDATA\Microsoft\Windows\Explorer\thumbcache*" -Force -ErrorAction SilentlyContinue
@@ -1316,7 +1432,7 @@ New-TweakCard $P_Maint $UI.Admin "Repair WMI Repository" "WMI Fix" "Verifies and
 New-TweakCard $P_Maint $UI.Maint "Reset Print Spooler" "Printer Fix" "Clears stuck printer queue files and restarts the Print Spooler service." {
     Stop-Service Spooler -Force -ErrorAction SilentlyContinue
     Remove-Item "$env:SystemRoot\System32\Spool\Printers\*" -Force -ErrorAction SilentlyContinue
-    Start-Service Spooler
+    Start-Service Spooler -ErrorAction SilentlyContinue
     Write-Log "Print Spooler reset and queue cleared." "Success"
 }
 
@@ -1351,12 +1467,7 @@ New-TweakCard $P_Maint $UI.Refresh "Rebuild Windows Search Index" "Search Fix" "
 $P_Perf = $script:CategoryPanels["Perf"]
 
 New-TweakCard $P_Perf $UI.Perf "Ultimate Power Plan" "Power Scheme" "Unlocks and activates the hidden Windows Ultimate Performance power plan." {
-    $planOut = powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null
-    if ($planOut -match '([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})') {
-        powercfg /setactive $matches[1] | Out-Null
-    } else {
-        powercfg /setactive e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null | Out-Null
-    }
+    Set-PowerSchemeUltimate
     Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value "0" 
     Write-Log "Ultimate Performance power plan applied." "Success"
 }
@@ -1556,8 +1667,8 @@ New-ToggleCard $P_Privacy $UI.Search "Disable Copilot & Web Search" "Windows 11 
     }
 
 New-TweakCard $P_Privacy $UI.Privacy "Disable Recall & AI Tracking" "Privacy" "Disables Windows Recall AI screen recording and snapshot feature." {
-    $EnvWin11 = ([Environment]::OSVersion.Version.Build -ge 22000)
-    if ($EnvWin11 -and (Get-WindowsOptionalFeature -Online -FeatureName "Recall" -ErrorAction SilentlyContinue)) {
+    $isWin11 = ([Environment]::OSVersion.Version.Build -ge 22000)
+    if ($isWin11 -and (Get-WindowsOptionalFeature -Online -FeatureName "Recall" -ErrorAction SilentlyContinue)) {
         Disable-WindowsOptionalFeature -Online -FeatureName "Recall" -Remove -NoRestart -ErrorAction SilentlyContinue | Out-Null
         Write-Log "Windows Recall AI snapshot tracking disabled." "Success"
     } else {
@@ -1632,21 +1743,17 @@ New-ToggleCard $P_Context $UI.Context "Classic Context Menu" "Windows 11 UI" "To
     { Test-Path "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" } `
     {
         reg add "HKCU\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" /f /ve | Out-Null
-        Stop-Process -Name explorer -Force
-        Start-Sleep -Milliseconds 600
-        if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe }
+        Restart-Explorer
         Write-Log "Classic Context Menu enabled." "Success"
     } `
     {
         reg delete "HKCU\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}" /f 2>$null | Out-Null
-        Stop-Process -Name explorer -Force
-        Start-Sleep -Milliseconds 600
-        if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe }
+        Restart-Explorer
         Write-Log "Windows 11 Modern Context Menu restored." "Warning"
     }
 
 New-ToggleCard $P_Context $UI.Admin "Add 'Take Ownership'" "Context Menu" "Toggles a 'Take Ownership' option on file and folder right-click menus." `
-    { $null } `
+    { (Test-Path "HKCR:\*\shell\TakeOwnership") -and (Test-Path "HKCR:\Directory\shell\TakeOwnership") } `
     {
         # Add Take Ownership for files
         $fileReg = "HKCR:\*\shell\TakeOwnership"
@@ -1693,17 +1800,13 @@ New-ToggleCard $P_Context $UI.Context "File Explorer Pro Mode" "File System" "To
     {
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -Value 0
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Hidden" -Value 1
-        Stop-Process -Name explorer -Force
-        Start-Sleep -Milliseconds 600
-        if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe }
+        Restart-Explorer
         Write-Log "File Explorer configured to show extensions and hidden files." "Success"
     } `
     {
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -Value 1
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Hidden" -Value 2
-        Stop-Process -Name explorer -Force
-        Start-Sleep -Milliseconds 600
-        if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe }
+        Restart-Explorer
         Write-Log "File Explorer returned to default view." "Warning"
     }
 
@@ -1711,16 +1814,12 @@ New-ToggleCard $P_Context $UI.Context "Explorer Compact View" "Windows 11 UI" "T
     { (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -ErrorAction SilentlyContinue).UseCompactMode -eq 1 } `
     {
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "UseCompactMode" -Value 1
-        Stop-Process -Name explorer -Force
-        Start-Sleep -Milliseconds 500
-        Start-Process explorer.exe
+        Restart-Explorer
         Write-Log "File Explorer Compact View enabled." "Success"
     } `
     {
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "UseCompactMode" -Value 0
-        Stop-Process -Name explorer -Force
-        Start-Sleep -Milliseconds 500
-        Start-Process explorer.exe
+        Restart-Explorer
         Write-Log "File Explorer Compact View disabled." "Warning"
     }
 
@@ -1747,7 +1846,8 @@ New-TweakCard $P_Hw $UI.Ram "RAM Bank & Slot Audit" "Memory Specs" "Inspects phy
 }
 
 New-TweakCard $P_Hw $UI.Perf "Battery Health Report" "Power Report" "Generates a detailed HTML battery capacity and degradation report on Desktop." {
-    $p = "$env:USERPROFILE\Desktop\BatteryReport.html"
+    $desk = Get-UserDesktopPath
+    $p = Join-Path $desk "BatteryReport.html"
     powercfg /batteryreport /output $p | Out-Null
     Write-Log "Battery Diagnostic report saved to: $p" "Success"
 }
@@ -1763,8 +1863,9 @@ New-TweakCard $P_Hw $UI.Admin "Motherboard & BIOS Audit" "Firmware Specs" "Retri
     $bb = Get-CimInstance Win32_BaseBoard
     $bios = Get-CimInstance Win32_BIOS
     $sb = try { (Confirm-SecureBootUEFI) } catch { "Unsupported/Legacy" }
+    $relDate = if ($bios.ReleaseDate -is [datetime]) { $bios.ReleaseDate.ToString('yyyy-MM-dd') } else { [string]$bios.ReleaseDate }
     Write-Log "Motherboard: $($bb.Manufacturer) $($bb.Product)" "Success"
-    Write-Log "BIOS/UEFI: $($bios.SMBIOSBIOSVersion) (Released: $($bios.ReleaseDate.ToString('yyyy-MM-dd')))" "Info"
+    Write-Log "BIOS/UEFI: $($bios.SMBIOSBIOSVersion) (Released: $relDate)" "Info"
     Write-Log "Secure Boot State: $sb" "Info"
 }
 
@@ -1790,85 +1891,7 @@ New-TweakCard $P_Hw $UI.Disk "Disk Sector & Partition Audit" "Drive Specs" "Audi
 $P_Apps = $script:CategoryPanels["Apps"]
 
 New-TweakCard $P_Apps $UI.Refresh "Update AdminWorks (AdminWorks.exe)" "Software Update" "Downloads and updates AdminWorks.exe from the latest GitHub release (KushagraKarira/AdminWorks)." {
-    Write-Log "Checking for AdminWorks update from GitHub Releases..." "Exec"
-    $repo = "KushagraKarira/AdminWorks"
-    $releasesPage = "https://github.com/$repo/releases"
-    $downloadUrl = "https://github.com/$repo/releases/latest/download/AdminWorks.exe"
-    $apiUrl = "https://api.github.com/repos/$repo/releases/latest"
-
-    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
-
-    try {
-        $headers = @{ "User-Agent" = "AdminWorks-Updater" }
-        $releaseInfo = Invoke-RestMethod -Uri $apiUrl -Headers $headers -TimeoutSec 8 -ErrorAction Stop
-        if ($releaseInfo.tag_name) {
-            Write-Log "Found latest release on GitHub: $($releaseInfo.tag_name)" "Info"
-            $asset = $releaseInfo.assets | Where-Object { $_.name -ieq "AdminWorks.exe" } | Select-Object -First 1
-            if ($asset -and $asset.browser_download_url) {
-                $downloadUrl = $asset.browser_download_url
-            }
-        }
-    } catch {
-        Write-Log "Notice: GitHub API lookup skipped ($($_.Exception.Message))." "Warning"
-        Write-Log "Proceeding with direct release download from: $downloadUrl" "Info"
-    }
-
-    $currentProc = Get-Process -Id $PID -ErrorAction SilentlyContinue
-    # Robustly detect if running as a compiled exe by ensuring the host isn't standard PowerShell
-    $isExe = ($currentProc.MainModule.FileName -match "\.exe$" -and $currentProc.ProcessName -notmatch "^(powershell|pwsh|powershell_ise)$")
-    $targetDir = [Environment]::GetFolderPath("Desktop")
-    
-    if ($isExe -and $currentProc.MainModule.FileName) {
-        $targetExe = $currentProc.MainModule.FileName
-        $targetDir = Split-Path -Parent $targetExe
-    } else {
-        # Fallback for raw .ps1 execution since $PSScriptRoot is null in this runspace
-        $targetExe = Join-Path $targetDir "AdminWorks.exe"
-    }
-
-    $tempExe = Join-Path $env:TEMP "AdminWorks_update_$($PID).exe"
-    if (Test-Path $tempExe) { Remove-Item $tempExe -Force -ErrorAction SilentlyContinue }
-
-    Write-Log "Downloading latest AdminWorks.exe from release page..." "Warning"
-    try {
-        Invoke-WebRequest -Uri $downloadUrl -OutFile $tempExe -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
-    } catch {
-        Write-Log "Download failed: $($_.Exception.Message)" "Error"
-        Write-Log "Opening official GitHub releases page in browser..." "Warning"
-        Start-Process $releasesPage
-        return
-    }
-
-    if (-not (Test-Path $tempExe) -or (Get-Item $tempExe).Length -lt 10240) {
-        Write-Log "Downloaded binary is missing or invalid. Navigating to releases page..." "Error"
-        Start-Process $releasesPage
-        return
-    }
-
-    $fileSizeMB = [math]::Round((Get-Item $tempExe).Length / 1MB, 2)
-    Write-Log "AdminWorks.exe downloaded successfully ($fileSizeMB MB)." "Success"
-
-    if ($isExe) {
-        Write-Log "Applying in-place executable replacement and restarting AdminWorks..." "Exec"
-        $batchLines = @(
-            '@echo off',
-            'timeout /t 2 /nobreak >nul',
-            "taskkill /f /pid $($currentProc.Id) >nul 2>&1",  # Target exact PID regardless of file name
-            "move /y `"$tempExe`" `"$targetExe`" >nul",
-            "start `"`" `"$targetExe`"",
-            '(goto) 2>nul & del "%~f0"'                      # Safer self-deletion syntax
-        )
-        $batchFile = Join-Path $env:TEMP "update_adminworks_$($PID).bat"
-        $batchLines | Set-Content -Path $batchFile -Force
-        Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$batchFile`"" -WindowStyle Hidden
-        Write-Log "Update scheduled. AdminWorks will restart momentarily." "Success"
-    } else {
-        Copy-Item -Path $tempExe -Destination $targetExe -Force
-        Remove-Item -Path $tempExe -Force -ErrorAction SilentlyContinue
-        Write-Log "AdminWorks.exe updated and saved to: $targetExe" "Success"
-        Write-Log "Opening file location in File Explorer..." "Info"
-        Start-Process "explorer.exe" -ArgumentList "/select,`"$targetExe`""
-    }
+    Update-AdminWorksSuite
 }
 
 New-TweakCard $P_Apps $UI.Net "AdminWorks Release Page" "GitHub Releases" "Opens the official GitHub releases page to inspect release notes, changelogs, and binary assets." {
@@ -1901,7 +1924,8 @@ New-TweakCard $P_Apps $UI.Refresh "Winget Upgrade All Apps" "Package Manager" "R
 }
 
 New-TweakCard $P_Apps $UI.Apps "Backup Installed Apps List" "Package Manager" "Exports list of all installed packages via Winget to desktop as JSON." {
-    $outPath = "$env:USERPROFILE\Desktop\Winget_App_Backup_$((Get-Date).ToString('yyyyMMdd')).json"
+    $desk = Get-UserDesktopPath
+    $outPath = Join-Path $desk "Winget_App_Backup_$((Get-Date).ToString('yyyyMMdd')).json"
     winget export -o "$outPath" --include-versions
     Write-Log "Installed apps exported to: $outPath" "Success"
 }
@@ -1974,84 +1998,7 @@ New-TweakCard $P_Apps $UI.Shield "Install SysAdmin Bundle" "Winget Bundle" "Inst
 $P_Admin = $script:CategoryPanels["Admin"]
 
 New-TweakCard $P_Admin $UI.Refresh "Check for AdminWorks Updates" "Suite Update" "Checks GitHub Releases (KushagraKarira/AdminWorks) and updates AdminWorks.exe to the latest release." {
-    Write-Log "Checking for AdminWorks update from GitHub Releases..." "Exec"
-    $repo = "KushagraKarira/AdminWorks"
-    $releasesPage = "https://github.com/$repo/releases"
-    $downloadUrl = "https://github.com/$repo/releases/latest/download/AdminWorks.exe"
-    $apiUrl = "https://api.github.com/repos/$repo/releases/latest"
-
-    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
-
-    try {
-        $headers = @{ "User-Agent" = "AdminWorks-Updater" }
-        $releaseInfo = Invoke-RestMethod -Uri $apiUrl -Headers $headers -TimeoutSec 8 -ErrorAction Stop
-        if ($releaseInfo.tag_name) {
-            Write-Log "Found latest release on GitHub: $($releaseInfo.tag_name)" "Info"
-            $asset = $releaseInfo.assets | Where-Object { $_.name -ieq "AdminWorks.exe" } | Select-Object -First 1
-            if ($asset -and $asset.browser_download_url) {
-                $downloadUrl = $asset.browser_download_url
-            }
-        }
-    } catch {
-        Write-Log "Notice: GitHub API lookup skipped ($($_.Exception.Message))." "Warning"
-        Write-Log "Proceeding with direct release download from: $downloadUrl" "Info"
-    }
-
-    $currentProc = Get-Process -Id $PID -ErrorAction SilentlyContinue
-    $isExe = ($currentProc -and ($currentProc.ProcessName -ieq "AdminWorks"))
-    $targetDir = [Environment]::GetFolderPath("Desktop")
-    $targetExe = Join-Path $targetDir "AdminWorks.exe"
-
-    if ($isExe -and $currentProc.MainModule.FileName) {
-        $targetExe = $currentProc.MainModule.FileName
-        $targetDir = Split-Path -Parent $targetExe
-    } elseif ($PSScriptRoot -and (Test-Path $PSScriptRoot)) {
-        $targetExe = Join-Path $PSScriptRoot "AdminWorks.exe"
-    }
-
-    $tempExe = Join-Path $env:TEMP "AdminWorks_update.exe"
-    if (Test-Path $tempExe) { Remove-Item $tempExe -Force -ErrorAction SilentlyContinue }
-
-    Write-Log "Downloading latest AdminWorks.exe from release page..." "Warning"
-    try {
-        Invoke-WebRequest -Uri $downloadUrl -OutFile $tempExe -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
-    } catch {
-        Write-Log "Download failed: $($_.Exception.Message)" "Error"
-        Write-Log "Opening official GitHub releases page in browser..." "Warning"
-        Start-Process $releasesPage
-        return
-    }
-
-    if (-not (Test-Path $tempExe) -or (Get-Item $tempExe).Length -lt 10240) {
-        Write-Log "Downloaded binary is missing or invalid. Navigating to releases page..." "Error"
-        Start-Process $releasesPage
-        return
-    }
-
-    $fileSizeMB = [math]::Round((Get-Item $tempExe).Length / 1MB, 2)
-    Write-Log "AdminWorks.exe downloaded successfully ($fileSizeMB MB)." "Success"
-
-    if ($isExe) {
-        Write-Log "Applying in-place executable replacement and restarting AdminWorks..." "Exec"
-        $batchLines = @(
-            '@echo off',
-            'timeout /t 2 /nobreak >nul',
-            'taskkill /f /im AdminWorks.exe >nul 2>&1',
-            "move /y `"$tempExe`" `"$targetExe`" >nul",
-            "start `"`" `"$targetExe`"",
-            'del "%~f0"'
-        )
-        $batchFile = Join-Path $env:TEMP "update_adminworks.bat"
-        $batchLines | Set-Content -Path $batchFile -Force
-        Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$batchFile`"" -WindowStyle Hidden
-        Write-Log "Update scheduled. AdminWorks will restart momentarily." "Success"
-    } else {
-        Copy-Item -Path $tempExe -Destination $targetExe -Force
-        Remove-Item -Path $tempExe -Force -ErrorAction SilentlyContinue
-        Write-Log "AdminWorks.exe updated and saved to: $targetExe" "Success"
-        Write-Log "Opening file location in File Explorer..." "Info"
-        Start-Process "explorer.exe" -ArgumentList "/select,`"$targetExe`""
-    }
+    Update-AdminWorksSuite
 }
 
 New-TweakCard $P_Admin $UI.Shield "Create System Restore Point" "Safety Checkpoint" "Generates a fresh Windows System Restore point named 'AdminWorks_Checkpoint'." {
@@ -2066,7 +2013,8 @@ New-TweakCard $P_Admin $UI.Shield "Create System Restore Point" "Safety Checkpoi
 }
 
 New-TweakCard $P_Admin $UI.Admin "Create GodMode Shortcut" "Master Control" "Creates a master GodMode folder on the Desktop linking to all 200+ control applets." {
-    $p = Join-Path ([Environment]::GetFolderPath("Desktop")) "GodMode.{ED7BA470-8E54-465E-825C-99712043E01C}"
+    $desk = Get-UserDesktopPath
+    $p = Join-Path $desk "GodMode.{ED7BA470-8E54-465E-825C-99712043E01C}"
     if (-not (Test-Path $p)) {
         New-Item -ItemType Directory -Path $p | Out-Null
         Write-Log "Master GodMode shortcut placed on Desktop." "Success"
@@ -2091,7 +2039,7 @@ New-TweakCard $P_Admin $UI.Net "Audit Active SMB Shares" "Security Audit" "Audit
 
 New-TweakCard $P_Admin $UI.Shield "Windows License Audit" "License Status" "Checks Windows digital licensing, product keys, and activation status." {
     Write-Log "Verifying Windows licensing state..." "Exec"
-    $lic = Get-CimInstance SoftwareLicensingProduct | Where-Object { $_.PartialProductKey -and $_.ApplicationId -eq '55c92734-d682-4d71-983e-d6ec3f16059f' } | Select-Object -First 1
+    $lic = Get-CimInstance SoftwareLicensingProduct -Filter "ApplicationId = '55c92734-d682-4d71-983e-d6ec3f16059f' and PartialProductKey IS NOT NULL" -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($lic) {
         $st = switch ($lic.LicenseStatus) { 1 { "Licensed" } 2 { "OOB Grace" } 3 { "OOT Grace" } 4 { "Non-Genuine" } 5 { "Notification" } Default { "Unknown" } }
         Write-Log "Product: $($lic.Name)" "Info"
@@ -2188,12 +2136,16 @@ $Form.Add_KeyDown({
 $TelemetryTimer = New-Object System.Windows.Forms.Timer -Property @{Interval = 2000; Enabled = $true}
 $TelemetryTimer.Add_Tick({
     try {
-        if (-not $script:CpuCounter) {
+        if (-not $script:CpuCounter -and -not $script:CpuCounterUnavailable) {
             try {
                 $script:CpuCounter = New-Object System.Diagnostics.PerformanceCounter("Processor", "% Processor Time", "_Total")
                 $null = $script:CpuCounter.NextValue()
-            } catch {}
-        } else {
+            } catch {
+                $script:CpuCounterUnavailable = $true
+            }
+        }
+        
+        if ($script:CpuCounter) {
             $cpuVal = [math]::Round($script:CpuCounter.NextValue(), 0)
             $StatCPU.Text = "$cpuVal% Utilization"
             if ($StatCPU.Fill -and $StatCPU.Meter) {
@@ -2253,8 +2205,19 @@ $Form.Add_Shown({
         }
     }
     
+    # Initialize toggle cards with their real current system state
+    foreach ($toggle in $script:ToggleCards) {
+        if ($toggle.CheckAction) {
+            try {
+                $isActive = [bool](& $toggle.CheckAction)
+                Update-ToggleStateVisual $toggle.Button $isActive
+            } catch {}
+        }
+    }
+    
     Update-ResponsiveLayout
 })
 
 Write-Log "AdminWorks Pro Suite v$($script:AppVersion) loaded and ready." "Success"
 [void]$Form.ShowDialog()
+
