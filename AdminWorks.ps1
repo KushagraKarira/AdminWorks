@@ -18,7 +18,6 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 $script:AppVersion = "5.3"
 $script:OSBuild    = [Environment]::OSVersion.Version.Build
 $script:IsWin11    = ($script:OSBuild -ge 22000)
-$script:IsWin10    = ($script:OSBuild -ge 10240 -and $script:OSBuild -lt 22000)
 
 # --- [High-DPI Scaling & Native Windows DWM Helpers] ---
 if (-not ([System.Management.Automation.PSTypeName]'NativeMethods').Type) {
@@ -107,13 +106,10 @@ $UI = @{
     Maximize   = [char]0xE922
     Restore    = [char]0xE923
     Minimize   = [char]0xE921
-    ArrowDown  = [char]0xE70D
-    ArrowUp    = [char]0xE70E
     Search     = [char]0xE721
     Bolt       = [char]0x26A1
     
     # Sidebar Navigation Icons
-    Presets    = [char]0xE735  # Star / Presets
     Maint      = [char]0xE90F  # Wrench / Maintenance
     Perf       = [char]0x26A1  # Bolt / Performance
     Net        = [char]0xE774  # Globe / Network
@@ -126,15 +122,11 @@ $UI = @{
     # Card & Widget Glyphs
     Sparkle    = [char]0xE7FC  # Gaming / Sparkle
     Shield     = [char]0xEA18  # Shield / Security
-    Building   = [char]0xE770  # Workstation / Office
     Refresh    = [char]0xE72C  # Refresh / Sync
-    Undo       = [char]0xE7A7  # Undo / Restore
     Cpu        = [char]0xE950  # Processor
     Ram        = [char]0xE7B8  # Memory
     Disk       = [char]0xEDA2  # Hard Drive
     Uptime     = [char]0xE823  # Clock / Time
-    ToggleOn   = [char]0xE8C8  # Checkmark / Toggle
-    ToggleOff  = [char]0xE894  # Clear / Off
 }
 
 $SearchPlaceholder = "Search tools, tweaks & features..."
@@ -148,11 +140,7 @@ function Get-UserDesktopPath {
     return $desk
 }
 
-# Backup Directory Setup - Lightweight IO check
-$script:BackupDir = "$env:LOCALAPPDATA\AdminWorks\Backups"
-if (-not [System.IO.Directory]::Exists($script:BackupDir)) {
-    [System.IO.Directory]::CreateDirectory($script:BackupDir) | Out-Null
-}
+
 
 # --- [Dynamic Screen Resolution Adaptation] ---
 $ScreenBounds  = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
@@ -203,16 +191,16 @@ $BrandPanel = New-Object System.Windows.Forms.Panel -Property @{
     BackColor = $script:Theme.Header
 }
 $LogoIcon = New-Object System.Windows.Forms.Label -Property @{
-    Text        = $UI.Bolt; Location = New-Object System.Drawing.Point(14, 12); Size = New-Object System.Drawing.Size(26, 26)
-    ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 13, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false
+    Text        = $UI.Bolt; Location = New-Object System.Drawing.Point(14, 14); Size = New-Object System.Drawing.Size(26, 26)
+    ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 14, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false
 }
 $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "ADMINWORKS"; Location = New-Object System.Drawing.Point(42, 12); AutoSize = $true
+    Text        = "ADMINWORKS"; Location = New-Object System.Drawing.Point(44, 13); AutoSize = $true
     ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 12, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false
 }
 $TitleSub = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "v5.3  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(42, 36); AutoSize = $true
-    ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
+    Text        = "v5.3  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(44, 37); AutoSize = $true
+    ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 7.5, [System.Drawing.FontStyle]::Bold)
     Cursor      = [System.Windows.Forms.Cursors]::Hand; UseMnemonic = $false
 }
 $TitleSub.Add_Click({ Start-Process "https://github.com/KushagraKarira/AdminWorks/releases" })
@@ -516,6 +504,7 @@ $MainArea = New-Object System.Windows.Forms.Panel -Property @{
 }
 $Form.Controls.Add($MainArea)
 $MainArea.BringToFront()
+$Header.SendToBack()
 
 # Live Stats Bar
 $TelemetryBar = New-Object System.Windows.Forms.TableLayoutPanel -Property @{
@@ -676,8 +665,7 @@ function Invoke-AdminWorksAction ($ActionCode, $Button, [scriptblock]$OnComplete
     }
 
     $PS = [powershell]::Create().AddScript({
-        param($CodeStr, $LogBox, $Theme, $BackupDir)
-        $global:BackupDir = $BackupDir
+        param($CodeStr, $LogBox, $Theme)
         
         function Write-Log ($Msg, $Type = "Info") {
             if ([string]::IsNullOrWhiteSpace($Msg)) { return }
@@ -717,35 +705,58 @@ function Invoke-AdminWorksAction ($ActionCode, $Button, [scriptblock]$OnComplete
             }
         }
 
+        # Shared Helper: Winget availability validator
+        function Assert-WingetInstalled {
+            if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+                Write-Log "Winget package manager is missing. Run 'Install / Repair Winget' first." "Error"
+                return $false
+            }
+            return $true
+        }
+
+        # Shared Helper: Standardized Winget Package Installer
+        function Install-WingetPackage ($PackageId, $Name, $Source = $null) {
+            if (-not (Assert-WingetInstalled)) { return }
+            Write-Log "Installing $Name via Winget..." "Exec"
+            $cmdArgs = @("install", $PackageId, "--silent", "--accept-package-agreements", "--accept-source-agreements")
+            if ($Source) { $cmdArgs += @("--source", $Source) }
+            winget @cmdArgs | Out-Null
+            Write-Log "$Name installation completed." "Success"
+        }
+
         # Shared Helper: Unified Suite Updater
         function Update-AdminWorksSuite {
             Write-Log "Checking for AdminWorks update from GitHub Releases..." "Exec"
             $repo = "KushagraKarira/AdminWorks"
             $releasesPage = "https://github.com/$repo/releases"
-            $downloadUrl = "https://github.com/$repo/releases/latest/download/AdminWorks.exe"
-            $apiUrl = "https://api.github.com/repos/$repo/releases/latest"
+            $latestDownloadUrl = "https://github.com/$repo/releases/latest/download/AdminWorks.exe"
+            $downloadUrl = $directReleaseUrl
 
-            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls13
 
+            # 1. Query GitHub Releases API for latest asset URL (including pre-releases)
             try {
                 $headers = @{ "User-Agent" = "AdminWorks-Updater" }
-                $releaseInfo = Invoke-RestMethod -Uri $apiUrl -Headers $headers -TimeoutSec 8 -ErrorAction Stop
-                if ($releaseInfo.tag_name) {
-                    Write-Log "Found latest release on GitHub: $($releaseInfo.tag_name)" "Info"
-                    $asset = $releaseInfo.assets | Where-Object { $_.name -ieq "AdminWorks.exe" } | Select-Object -First 1
+                $allReleases = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases" -Headers $headers -TimeoutSec 6 -ErrorAction Stop
+                $targetRelease = $allReleases | Where-Object { ($_.assets | Where-Object { $_.name -ieq "AdminWorks.exe" }) } | Select-Object -First 1
+                if (-not $targetRelease -and $allReleases.Count -gt 0) { $targetRelease = $allReleases[0] }
+
+                if ($targetRelease) {
+                    Write-Log "Found release on GitHub: $($targetRelease.tag_name)" "Info"
+                    $asset = $targetRelease.assets | Where-Object { $_.name -ieq "AdminWorks.exe" } | Select-Object -First 1
                     if ($asset -and $asset.browser_download_url) {
                         $downloadUrl = $asset.browser_download_url
                     }
                 }
             } catch {
-                Write-Log "Notice: GitHub API lookup skipped ($($_.Exception.Message))." "Warning"
-                Write-Log "Proceeding with direct release download from: $downloadUrl" "Info"
+                Write-Log "GitHub API notice: $($_.Exception.Message). Using release channel." "Warning"
+                $downloadUrl = $directReleaseUrl
             }
 
+            # 2. Determine target file path
             $currentProc = Get-Process -Id $PID -ErrorAction SilentlyContinue
             $isExe = ($currentProc.MainModule.FileName -match "\.exe$" -and $currentProc.ProcessName -notmatch "^(powershell|pwsh|powershell_ise)$")
-            $targetDir = [Environment]::GetFolderPath("Desktop")
-            if (-not (Test-Path $targetDir)) { $targetDir = if ($env:USERPROFILE) { "$env:USERPROFILE\Desktop" } else { $env:TEMP } }
+            $targetDir = Get-UserDesktopPath
             
             if ($isExe -and $currentProc.MainModule.FileName) {
                 $targetExe = $currentProc.MainModule.FileName
@@ -759,18 +770,45 @@ function Invoke-AdminWorksAction ($ActionCode, $Button, [scriptblock]$OnComplete
             $tempExe = Join-Path $env:TEMP "AdminWorks_update_$($PID).exe"
             if (Test-Path $tempExe) { Remove-Item $tempExe -Force -ErrorAction SilentlyContinue }
 
-            Write-Log "Downloading latest AdminWorks.exe from release page..." "Warning"
+            # 3. High-speed binary download using WebClient with fallback
+            Write-Log "Downloading AdminWorks.exe from: $downloadUrl..." "Warning"
+            $downloadSuccess = $false
+
             try {
-                Invoke-WebRequest -Uri $downloadUrl -OutFile $tempExe -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
+                $wc = New-Object System.Net.WebClient
+                $wc.Headers.Add("User-Agent", "AdminWorks-Updater")
+                $wc.DownloadFile($downloadUrl, $tempExe)
+                if ((Test-Path $tempExe) -and (Get-Item $tempExe).Length -ge 10240) {
+                    $downloadSuccess = $true
+                }
             } catch {
-                Write-Log "Download failed: $($_.Exception.Message)" "Error"
-                Write-Log "Opening official GitHub releases page in browser..." "Warning"
-                Start-Process $releasesPage
-                return
+                Write-Log "Primary download warning: $($_.Exception.Message). Retrying with WebRequest..." "Warning"
             }
 
-            if (-not (Test-Path $tempExe) -or (Get-Item $tempExe).Length -lt 10240) {
-                Write-Log "Downloaded binary is missing or invalid. Navigating to releases page..." "Error"
+            if (-not $downloadSuccess) {
+                try {
+                    $ProgressPreference = 'SilentlyContinue'
+                    Invoke-WebRequest -Uri $downloadUrl -OutFile $tempExe -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
+                    if ((Test-Path $tempExe) -and (Get-Item $tempExe).Length -ge 10240) {
+                        $downloadSuccess = $true
+                    }
+                } catch {
+                    if ($downloadUrl -ne $latestDownloadUrl) {
+                        Write-Log "Retrying download via latest channel: $latestDownloadUrl..." "Warning"
+                        try {
+                            $wc = New-Object System.Net.WebClient
+                            $wc.Headers.Add("User-Agent", "AdminWorks-Updater")
+                            $wc.DownloadFile($latestDownloadUrl, $tempExe)
+                            if ((Test-Path $tempExe) -and (Get-Item $tempExe).Length -ge 10240) {
+                                $downloadSuccess = $true
+                            }
+                        } catch {}
+                    }
+                }
+            }
+
+            if (-not $downloadSuccess -or -not (Test-Path $tempExe) -or (Get-Item $tempExe).Length -lt 10240) {
+                Write-Log "Download failed. Opening GitHub Releases page in browser..." "Error"
                 Start-Process $releasesPage
                 return
             }
@@ -778,13 +816,21 @@ function Invoke-AdminWorksAction ($ActionCode, $Button, [scriptblock]$OnComplete
             $fileSizeMB = [math]::Round((Get-Item $tempExe).Length / 1MB, 2)
             Write-Log "AdminWorks.exe downloaded successfully ($fileSizeMB MB)." "Success"
 
+            # 4. In-place replacement with robust process kill and retry loop
             if ($isExe) {
                 Write-Log "Applying in-place executable replacement and restarting AdminWorks..." "Exec"
                 $batchLines = @(
                     '@echo off',
-                    'timeout /t 2 /nobreak >nul',
+                    'setlocal enabledelayedexpansion',
                     "taskkill /f /pid $($currentProc.Id) >nul 2>&1",
-                    "move /y `"$tempExe`" `"$targetExe`" >nul",
+                    'set /a attempts=0',
+                    ':retry_move',
+                    'timeout /t 1 /nobreak >nul',
+                    "move /y `"$tempExe`" `"$targetExe`" >nul 2>&1",
+                    'if not errorlevel 1 goto start_app',
+                    'set /a attempts+=1',
+                    'if !attempts! lss 15 goto retry_move',
+                    ':start_app',
                     "start `"`" `"$targetExe`"",
                     '(goto) 2>nul & del "%~f0"'
                 )
@@ -796,8 +842,8 @@ function Invoke-AdminWorksAction ($ActionCode, $Button, [scriptblock]$OnComplete
                 Copy-Item -Path $tempExe -Destination $targetExe -Force
                 Remove-Item -Path $tempExe -Force -ErrorAction SilentlyContinue
                 Write-Log "AdminWorks.exe updated and saved to: $targetExe" "Success"
-                Write-Log "Opening file location in File Explorer..." "Info"
-                Start-Process "explorer.exe" -ArgumentList "/select,`"$targetExe`""
+                Write-Log "Launching updated AdminWorks..." "Exec"
+                Start-Process "$targetExe"
             }
         }
 
@@ -807,7 +853,7 @@ function Invoke-AdminWorksAction ($ActionCode, $Button, [scriptblock]$OnComplete
         } catch {
             Write-Log "Execution Error: $($_.Exception.Message)" "Error"
         }
-    }).AddArgument($ActionCode).AddArgument($LogBox).AddArgument($script:Theme).AddArgument($script:BackupDir)
+    }).AddArgument($ActionCode).AddArgument($LogBox).AddArgument($script:Theme)
 
     $Runspace = [runspacefactory]::CreateRunspace()
     $Runspace.ThreadOptions = "ReuseThread"
@@ -1522,9 +1568,10 @@ New-TweakCard $P_Net $UI.Hardware "Scan LAN Subnet Devices" "Network Discovery" 
 
 New-TweakCard $P_Net $UI.Admin "Port & Process Listeners" "Network Security" "Scans active listening TCP ports and maps them to host application executables." {
     Write-Log "Auditing listening ports & processes..." "Exec"
+    $procMap = @{}
+    Get-Process -ErrorAction SilentlyContinue | ForEach-Object { $procMap[$_.Id] = $_.Name }
     Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | ForEach-Object {
-        $proc = Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue
-        $pName = if ($proc) { $proc.Name } else { "System/Unknown" }
+        $pName = if ($procMap.ContainsKey($_.OwningProcess)) { $procMap[$_.OwningProcess] } else { "System/Unknown" }
         Write-Log "Port $($_.LocalPort) ($($_.LocalAddress)) -> $pName (PID $($_.OwningProcess))" "Info"
     }
     Write-Log "Port audit complete." "Success"
@@ -1568,11 +1615,14 @@ New-TweakCard $P_Privacy $UI.Apps "Universal OEM Debloat" "App Purge" "Removes c
         "*BingFinance*", "*BingSports*"
     )
     [int]$count = 0
+    $provPackages = Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
     foreach ($app in $Apps) {
         $installed = Get-AppxPackage -Name $app -AllUsers -ErrorAction SilentlyContinue
         if ($installed) {
             $installed | Remove-AppxPackage -AllUsers -ErrorAction SilentlyContinue
-            Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like $app -or $_.PackageName -like $app } | Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
+            if ($provPackages) {
+                $provPackages | Where-Object { $_.DisplayName -like $app -or $_.PackageName -like $app } | Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
+            }
             Write-Log "Removed: $app" "Success"
             $count = [int]($count + 1)
         }
@@ -1862,45 +1912,27 @@ New-TweakCard $P_Apps $UI.Apps "Backup Installed Apps List" "Package Manager" "E
 }
 
 New-TweakCard $P_Apps $UI.Admin "Install WinToys" "Optimization Tools" "Installs WinToys from the Microsoft Store for advanced Windows customization." {
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing." "Error"; return }
-    Write-Log "Installing WinToys..." "Exec"
-    winget install 9P8LTPGCBZXD --source msstore --accept-package-agreements --accept-source-agreements | ForEach-Object { if ($_.Trim() -ne "") { Write-Log $_ "Info" } }
-    Write-Log "WinToys installation completed." "Success"
+    Install-WingetPackage "9P8LTPGCBZXD" "WinToys" "msstore"
 }
 
 New-TweakCard $P_Apps $UI.Apps "Install VLC Media Player" "Media Players" "Installs the open-source VLC Media Player package via Winget." {
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing." "Error"; return }
-    Write-Log "Installing VLC Media Player..." "Exec"
-    winget install VideoLAN.VLC --silent --accept-package-agreements --accept-source-agreements | ForEach-Object { if ($_.Trim() -ne "") { Write-Log $_ "Info" } }
-    Write-Log "VLC Media Player installed." "Success"
+    Install-WingetPackage "VideoLAN.VLC" "VLC Media Player"
 }
 
 New-TweakCard $P_Apps $UI.Apps "Install Sumatra PDF" "Productivity" "Installs the lightweight Sumatra PDF reader package via Winget." {
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing." "Error"; return }
-    Write-Log "Installing Sumatra PDF..." "Exec"
-    winget install SumatraPDF.SumatraPDF --silent --accept-package-agreements --accept-source-agreements | ForEach-Object { if ($_.Trim() -ne "") { Write-Log $_ "Info" } }
-    Write-Log "Sumatra PDF installed." "Success"
+    Install-WingetPackage "SumatraPDF.SumatraPDF" "Sumatra PDF"
 }
 
 New-TweakCard $P_Apps $UI.Admin "Install PowerToys" "Essential Tools" "Installs Microsoft PowerToys for advanced system utilities and window management." {
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing." "Error"; return }
-    Write-Log "Installing PowerToys..." "Exec"
-    winget install Microsoft.PowerToys --silent --accept-package-agreements --accept-source-agreements | Out-Null
-    Write-Log "Microsoft PowerToys installed." "Success"
+    Install-WingetPackage "Microsoft.PowerToys" "Microsoft PowerToys"
 }
 
 New-TweakCard $P_Apps $UI.Apps "Install 7-Zip" "Essential Tools" "Installs the industry-standard 7-Zip file compression utility." {
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing." "Error"; return }
-    Write-Log "Installing 7-Zip..." "Exec"
-    winget install 7zip.7zip --silent --accept-package-agreements --accept-source-agreements | Out-Null
-    Write-Log "7-Zip installed." "Success"
+    Install-WingetPackage "7zip.7zip" "7-Zip"
 }
 
 New-TweakCard $P_Apps $UI.Admin "Install Sysinternals Suite" "SysAdmin Tools" "Installs Microsoft Sysinternals troubleshooting suite via Winget." {
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing." "Error"; return }
-    Write-Log "Installing Sysinternals Suite..." "Exec"
-    winget install Microsoft.SysinternalsSuite --silent --accept-package-agreements --accept-source-agreements | Out-Null
-    Write-Log "Sysinternals Suite installed." "Success"
+    Install-WingetPackage "Microsoft.SysinternalsSuite" "Sysinternals Suite"
 }
 
 New-TweakCard $P_Apps $UI.Admin "Install Developer Bundle" "Winget Bundle" "Installs Git, VS Code, Windows Terminal, and PowerShell 7 in one batch." {
@@ -2122,8 +2154,10 @@ $TelemetryTimer.Add_Tick({
             }
         }
 
-        $span = (Get-Date) - $os.LastBootUpTime
-        $StatUp.Text = "$($span.Days)d $($span.Hours)h $($span.Minutes)m"
+        if ($os -and $os.LastBootUpTime) {
+            $span = (Get-Date) - $os.LastBootUpTime
+            $StatUp.Text = "$($span.Days)d $($span.Hours)h $($span.Minutes)m"
+        }
     } catch {}
 })
 
