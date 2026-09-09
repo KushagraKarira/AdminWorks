@@ -1,6 +1,6 @@
 <#
 ================================================================================
-  ADMINWORKS PRO v5.4 - Enterprise Windows Administration & Optimization Suite
+  ADMINWORKS PRO v5.5 - Enterprise Windows Administration & Optimization Suite
   Compatible with Windows 10 & Windows 11
 ================================================================================
 #>
@@ -15,7 +15,7 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # --- [OS Version Detection Helper] ---
-$script:AppVersion = "5.4"
+$script:AppVersion = "5.5"
 $script:OSBuild    = [Environment]::OSVersion.Version.Build
 $script:IsWin11    = ($script:OSBuild -ge 22000)
 
@@ -25,6 +25,8 @@ Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 public class NativeMethods {
+    [DllImport("uxtheme.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    public static extern int SetWindowTheme(IntPtr hWnd, string pszSubAppName, string pszSubIdList);
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool SetProcessDpiAwarenessContext(IntPtr dpiContext);
 
@@ -56,6 +58,17 @@ public class NativeMethods {
         public int cyTopHeight;
         public int cyBottomHeight;
     }
+}
+"@
+}
+
+if (-not ([System.Management.Automation.PSTypeName]'UxThemeNative').Type) {
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class UxThemeNative {
+    [DllImport("uxtheme.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    public static extern int SetWindowTheme(IntPtr hWnd, string pszSubAppName, string pszSubIdList);
 }
 "@
 }
@@ -109,35 +122,68 @@ if ($script:IsWin11) {
     $IconFont   = "Segoe MDL2 Assets"
 }
 
-# --- [Native Windows Icon Glyphs] ---
-$UI = @{
-    Bullet     = [char]0x2022
-    Dot        = [char]0x25CF
-    Close      = [char]0xE8BB
-    Maximize   = [char]0xE922
-    Restore    = [char]0xE923
-    Minimize   = [char]0xE921
-    Search     = [char]0xE721
-    Bolt       = [char]0x26A1
-    
-    # Sidebar Navigation Icons
-    Maint      = [char]0xE90F  # Wrench / Maintenance
-    Perf       = [char]0x26A1  # Bolt / Performance
-    Net        = [char]0xE774  # Globe / Network
-    Privacy    = [char]0xE72E  # Lock / Privacy
-    Context    = [char]0xE8B7  # Folder / Explorer
-    Hardware   = [char]0xE7F8  # Devices / Hardware
-    Apps       = [char]0xEB49  # Package / Apps
-    Admin      = [char]0xE7EE  # Diagnostic / Admin
-    
-    # Card & Widget Glyphs
-    Sparkle    = [char]0xE7FC  # Gaming / Sparkle
-    Shield     = [char]0xEA18  # Shield / Security
-    Refresh    = [char]0xE72C  # Refresh / Sync
-    Cpu        = [char]0xE950  # Processor
-    Ram        = [char]0xE7B8  # Memory
-    Disk       = [char]0xEDA2  # Hard Drive
-    Uptime     = [char]0xE823  # Clock / Time
+# --- [Native Windows Icon Glyphs: OS-Adaptive Mapping] ---
+if ($script:IsWin11) {
+    $UI = @{
+        Bullet     = [char]0x2022
+        Dot        = [char]0x25CF
+        Close      = [char]0xE8BB
+        Maximize   = [char]0xE922
+        Restore    = [char]0xE923
+        Minimize   = [char]0xE921
+        Search     = [char]0xE721
+        Bolt       = [char]0xE945  # LightningBolt in Fluent
+        
+        # Sidebar Navigation Icons
+        Maint      = [char]0xE90F  # Repair / Wrench
+        Perf       = [char]0xE945  # LightningBolt
+        Net        = [char]0xE774  # Globe
+        Privacy    = [char]0xE72E  # Lock
+        Context    = [char]0xE8B7  # Folder
+        Hardware   = [char]0xE7F8  # Devices / Laptop
+        Apps       = [char]0xEB49  # Package
+        Admin      = [char]0xE7EE  # Diagnostic / Admin
+        
+        # Card & Widget Glyphs
+        Sparkle    = [char]0xE7FC  # Gaming / Sparkle
+        Shield     = [char]0xEA18  # Shield
+        Refresh    = [char]0xE72C  # Refresh / Sync
+        Cpu        = [char]0xE950  # Processor Chip
+        Ram        = [char]0xE7B8  # Memory
+        Disk       = [char]0xEDA2  # Hard Drive
+        Uptime     = [char]0xE823  # Clock / Time
+    }
+} else {
+    # Windows 10 (Segoe MDL2 Assets)
+    $UI = @{
+        Bullet     = [char]0x2022
+        Dot        = [char]0x25CF
+        Close      = [char]0xE8BB
+        Maximize   = [char]0xE922
+        Restore    = [char]0xE923
+        Minimize   = [char]0xE921
+        Search     = [char]0xE721
+        Bolt       = [char]0xE945  # LightningBolt (replaces unmapped 0x26A1)
+        
+        # Sidebar Navigation Icons
+        Maint      = [char]0xE90F  # Repair / Wrench
+        Perf       = [char]0xE945  # LightningBolt (replaces unmapped 0x26A1)
+        Net        = [char]0xE774  # Globe
+        Privacy    = [char]0xE72E  # Lock
+        Context    = [char]0xE8B7  # Folder
+        Hardware   = [char]0xE7F8  # DeviceLaptopNoPic
+        Apps       = [char]0xE71D  # AllApps 4-tile grid (replaces MapPin 0xEB49)
+        Admin      = [char]0xE7EF  # Admin shield badge (replaces OtherUser 0xE7EE)
+        
+        # Card & Widget Glyphs
+        Sparkle    = [char]0xE7FC  # Game controller
+        Shield     = [char]0xEA18  # Shield
+        Refresh    = [char]0xE72C  # Refresh / Sync
+        Cpu        = [char]0xEC4A  # SpeedHigh / Tachometer gauge (replaces unmapped 0xE950)
+        Ram        = [char]0xE7B8  # Package / Memory module
+        Disk       = [char]0xEDA2  # HardDrive
+        Uptime     = [char]0xE823  # Recent / Clock
+    }
 }
 
 $SearchPlaceholder = "Search tools, tweaks & features..."
@@ -229,7 +275,7 @@ $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
     ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 12, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false
 }
 $TitleSub = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "v5.4  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(44, 36); Size = New-Object System.Drawing.Size(192, 18)
+    Text        = "v5.5  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(44, 36); Size = New-Object System.Drawing.Size(192, 18)
     ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 7.5, [System.Drawing.FontStyle]::Bold)
     Cursor      = [System.Windows.Forms.Cursors]::Hand; UseMnemonic = $false; AutoSize = $false; TextAlign = "MiddleLeft"
 }
@@ -243,7 +289,7 @@ $TitleSub.Add_MouseLeave({ $this.ForeColor = $script:Theme.AccentGlow })
 
 $UpdateBadge = New-Object System.Windows.Forms.Label -Property @{
     Text        = "UPDATE"
-    Location    = New-Object System.Drawing.Point(168, 12)
+    Location    = New-Object System.Drawing.Point(176, 12)
     Size        = New-Object System.Drawing.Size(60, 18)
     BackColor   = $script:Theme.Success
     ForeColor   = [System.Drawing.Color]::White
@@ -326,7 +372,7 @@ $SearchIconLbl = New-Object System.Windows.Forms.Label -Property @{
 $SearchBox = New-Object System.Windows.Forms.TextBox -Property @{
     BorderStyle = "None"; BackColor = $script:Theme.Sidebar; ForeColor = $script:Theme.TextSubtle
     Font = New-Object System.Drawing.Font($GlobalFont, 9); Location = New-Object System.Drawing.Point(30, 8)
-    Width = 160; Text = $SearchPlaceholder
+    Width = 240; Text = $SearchPlaceholder
     Anchor = [System.Windows.Forms.AnchorStyles]"Top, Left, Right"
 }
 $SearchBox.Add_GotFocus({ 
@@ -739,16 +785,20 @@ function Update-ResponsiveLayout {
         $activePanel.HorizontalScroll.Maximum = 0
 
         foreach ($ctrl in $activePanel.Controls) {
-            if ($ctrl -is [System.Windows.Forms.Panel] -and $ctrl.Tag -ne "Banner") {
-                if ($ctrl.Width -ne $targetWidth) { $ctrl.Width = $targetWidth }
+            if ($ctrl -is [System.Windows.Forms.Panel]) {
+                if ($ctrl.Tag -eq "Banner") {
+                    if ($ctrl.Width -ne $availWidth) { $ctrl.Width = $availWidth }
+                    if ($ctrl.Height -ne 34) { $ctrl.Height = 34 }
+                } else {
+                    if ($ctrl.Width -ne $targetWidth) { $ctrl.Width = $targetWidth }
+                }
             }
         }
         $activePanel.ResumeLayout($true)
 
-        # Strictly hide horizontal scrollbar (SB_HORZ = 0) while keeping vertical scrollbar visible and functional
-        try {
-            [void][NativeMethods]::ShowScrollBar($activePanel.Handle, 0, $false)
-        } catch {}
+        # Apply dark mode theme to scrollbar and strictly hide horizontal scrollbar (SB_HORZ = 0)
+        try { [void][UxThemeNative]::SetWindowTheme($activePanel.Handle, "DarkMode_Explorer", $null) } catch {}
+        try { [void][NativeMethods]::ShowScrollBar($activePanel.Handle, 0, $false) } catch {}
     }
 }
 $ViewContainer.Add_SizeChanged({ Update-ResponsiveLayout })
@@ -834,7 +884,7 @@ function Invoke-AdminWorksAction ($ActionCode, $Button = $null, [scriptblock]$On
             $repo = "KushagraKarira/AdminWorks"
             $releasesPage = "https://github.com/$repo/releases"
             $directReleaseUrl = "https://github.com/$repo/releases/download/v5.3.57/AdminWorks.exe"
-            $v54ReleaseUrl = "https://github.com/$repo/releases/download/v5.4/AdminWorks.exe"
+            $v55ReleaseUrl = "https://github.com/$repo/releases/download/v5.5/AdminWorks.exe"
             $latestDownloadUrl = "https://github.com/$repo/releases/latest/download/AdminWorks.exe"
             $downloadUrl = $directReleaseUrl
 
@@ -1271,43 +1321,47 @@ foreach ($tab in $TabList) {
     $ViewContainer.Controls.Add($Flow)
     $script:CategoryPanels[$tab.Id] = $Flow
 
-    # Category Section Banner Header
-    $Banner = New-Object System.Windows.Forms.FlowLayoutPanel -Property @{
-        Height        = 34
-        AutoSize      = $true
-        FlowDirection = "LeftToRight"
-        WrapContents  = $false
-        BackColor     = [System.Drawing.Color]::Transparent
-        Margin        = New-Object System.Windows.Forms.Padding(6, 8, 6, 16)
-        Tag           = "Banner"
+    # Category Section Banner Header (Fixed Height Panel to eliminate vertical spacing gaps)
+    $Banner = New-Object System.Windows.Forms.Panel -Property @{
+        Height    = 34
+        Width     = 800
+        BackColor = [System.Drawing.Color]::Transparent
+        Margin    = New-Object System.Windows.Forms.Padding(6, 6, 6, 10)
+        Tag       = "Banner"
     }
     $BannerIcon = New-Object System.Windows.Forms.Label -Property @{
         Text        = $tab.Icon
-        AutoSize    = $true
+        Location    = New-Object System.Drawing.Point(2, 4)
+        Size        = New-Object System.Drawing.Size(24, 24)
         ForeColor   = $script:Theme.AccentGlow
         Font        = New-Object System.Drawing.Font($IconFont, 11)
-        Margin      = New-Object System.Windows.Forms.Padding(0, 0, 6, 0)
         UseMnemonic = $false
     }
     $BannerTitle = New-Object System.Windows.Forms.Label -Property @{
         Text        = $tab.Name.ToUpper()
+        Location    = New-Object System.Drawing.Point(28, 4)
         AutoSize    = $true
         ForeColor   = $script:Theme.TextMain
         Font        = New-Object System.Drawing.Font($GlobalFont, 10.5, [System.Drawing.FontStyle]::Bold)
-        Margin      = New-Object System.Windows.Forms.Padding(0, 0, 8, 0)
         UseMnemonic = $false
     }
     $BannerDesc = New-Object System.Windows.Forms.Label -Property @{
         Text        = "— $($tab.Desc)"
+        Location    = New-Object System.Drawing.Point(180, 6)
         AutoSize    = $true
         ForeColor   = $script:Theme.TextSubtle
         Font        = New-Object System.Drawing.Font($GlobalFont, 8.5)
-        Margin      = New-Object System.Windows.Forms.Padding(0, 2, 0, 0)
         UseMnemonic = $false
     }
     $Banner.Controls.AddRange(@($BannerIcon, $BannerTitle, $BannerDesc))
+    $Banner.Add_Layout({
+        if ($BannerTitle -and $BannerDesc) {
+            $BannerDesc.Left = $BannerTitle.Right + 8
+        }
+    })
     $Flow.Controls.Add($Banner)
     $Flow.SetFlowBreak($Banner, $true)
+    try { [void][UxThemeNative]::SetWindowTheme($Flow.Handle, "DarkMode_Explorer", $null) } catch {}
     Enable-DoubleBuffering $Flow
 
     # Strictly suppress horizontal scroll while preserving vertical scrolling
