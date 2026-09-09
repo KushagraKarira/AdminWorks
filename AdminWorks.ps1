@@ -43,8 +43,19 @@ public class NativeMethods {
     [DllImport("dwmapi.dll")]
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmExtendFrameIntoClientArea(IntPtr hWnd, ref MARGINS pMarInset);
+
     [DllImport("user32.dll")]
     public static extern void ShowScrollBar(IntPtr hWnd, int wBar, bool bShow);
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    public struct MARGINS {
+        public int cxLeftWidth;
+        public int cxRightWidth;
+        public int cyTopHeight;
+        public int cyBottomHeight;
+    }
 }
 "@
 }
@@ -174,9 +185,28 @@ try {
         $cornerPreference = 2
         [NativeMethods]::DwmSetWindowAttribute($Form.Handle, 33, [ref]$cornerPreference, 4) | Out-Null
     }
+    # Native Window Drop Shadow
+    $margins = New-Object NativeMethods+MARGINS
+    $margins.cxLeftWidth = 1; $margins.cxRightWidth = 1; $margins.cyTopHeight = 1; $margins.cyBottomHeight = 1
+    [NativeMethods]::DwmExtendFrameIntoClientArea($Form.Handle, [ref]$margins) | Out-Null
 } catch {}
 
-# --- [Header: Structured Layout] ---
+# Outer 1px accent border for crisp separation against dark desktops
+$Form.Add_Paint({
+    param($s, $e)
+    $pen = New-Object System.Drawing.Pen($script:Theme.CardBorder, 1)
+    $e.Graphics.DrawRectangle($pen, 0, 0, ($s.Width - 1), ($s.Height - 1))
+    $pen.Dispose()
+})
+
+# ==============================================================================
+# UI SHELL ARCHITECTURE: 3-TIER CONTAINER HIERARCHY
+# Tier 1 (Form): Header (Top) + LogContainer (Bottom) + BodyPanel (Fill)
+# Tier 2 (BodyPanel): Sidebar (Left, 240px) + ContentArea (Fill)
+# Tier 3 (ContentArea): TelemetryBar (Top, 64px) + ViewContainer (Fill)
+# ==============================================================================
+
+# --- [Tier 1: Top Header Bar (Edge-to-Edge Full Width)] ---
 $Header = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Top"
     Height    = 66
@@ -184,7 +214,7 @@ $Header = New-Object System.Windows.Forms.Panel -Property @{
 }
 $Form.Controls.Add($Header)
 
-# 1. Left: Brand Container
+# 1. Left: Brand Container (Anchored at top-left, 240px wide to match Sidebar below)
 $BrandPanel = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Left"
     Width     = 240
@@ -210,16 +240,38 @@ try {
 } catch {}
 $TitleSub.Add_MouseEnter({ $this.ForeColor = $script:Theme.TextMain })
 $TitleSub.Add_MouseLeave({ $this.ForeColor = $script:Theme.AccentGlow })
-$BrandPanel.Controls.AddRange(@($LogoIcon, $TitleLbl, $TitleSub))
 
-# 2. Right: Combined Container for Search & Window Buttons
+$UpdateBadge = New-Object System.Windows.Forms.Label -Property @{
+    Text        = "UPDATE"
+    Location    = New-Object System.Drawing.Point(168, 12)
+    Size        = New-Object System.Drawing.Size(60, 18)
+    BackColor   = $script:Theme.Success
+    ForeColor   = [System.Drawing.Color]::White
+    Font        = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
+    TextAlign   = "MiddleCenter"
+    Cursor      = [System.Windows.Forms.Cursors]::Hand
+    Visible     = $false
+    UseMnemonic = $false
+}
+$UpdateBadge.Add_Click({
+    Select-Tab "Apps"
+    Update-AdminWorksSuite
+})
+try {
+    $UpTip = New-Object System.Windows.Forms.ToolTip
+    $UpTip.SetToolTip($UpdateBadge, "A new release is available! Click to update AdminWorks.")
+} catch {}
+
+$BrandPanel.Controls.AddRange(@($LogoIcon, $TitleLbl, $TitleSub, $UpdateBadge))
+
+# 2. Right: Combined Container for Search & Window Controls
 $RightHeader = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Right"
     Width     = 430
     BackColor = $script:Theme.Header
 }
 
-# Window Control Box
+# Window Control Box (Docked Far Right)
 $CtrlBox = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Right"
     Width     = 135
@@ -275,7 +327,7 @@ $SearchIconLbl = New-Object System.Windows.Forms.Label -Property @{
 $SearchBox = New-Object System.Windows.Forms.TextBox -Property @{
     BorderStyle = "None"; BackColor = $script:Theme.Sidebar; ForeColor = $script:Theme.TextSubtle
     Font = New-Object System.Drawing.Font($GlobalFont, 9); Location = New-Object System.Drawing.Point(30, 8)
-    Width = 236; Text = $SearchPlaceholder
+    Width = 160; Text = $SearchPlaceholder
     Anchor = [System.Windows.Forms.AnchorStyles]"Top, Left, Right"
 }
 $SearchBox.Add_GotFocus({ 
@@ -291,8 +343,32 @@ $SearchBox.Add_KeyDown({
         [void]$Form.Focus()
         $_.SuppressKeyPress = $true
     }
+    elseif ($_.KeyCode -eq [System.Windows.Forms.Keys]::Enter) {
+        $activePanel = $script:CategoryPanels[$script:CurrentTabId]
+        if ($activePanel) {
+            $firstCard = $activePanel.Controls | Where-Object { $_ -is [System.Windows.Forms.Panel] -and $_.Visible -and $_.Tag -ne "Banner" } | Select-Object -First 1
+            if ($firstCard) {
+                $btn = $firstCard.Controls | Where-Object { $_ -is [System.Windows.Forms.Button] } | Select-Object -First 1
+                if ($btn -and $btn.Enabled) { [void]$btn.Focus() }
+            }
+        }
+        $_.SuppressKeyPress = $true
+    }
 })
-$SearchPill.Controls.AddRange(@($SearchIconLbl, $SearchBox))
+
+$SearchCountLbl = New-Object System.Windows.Forms.Label -Property @{
+    Text        = ""
+    Location    = New-Object System.Drawing.Point(196, 7)
+    Size        = New-Object System.Drawing.Size(70, 16)
+    ForeColor   = $script:Theme.AccentGlow
+    Font        = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
+    BackColor   = $script:Theme.Sidebar
+    TextAlign   = "MiddleRight"
+    Anchor      = [System.Windows.Forms.AnchorStyles]"Top, Right"
+    Visible     = $false
+    UseMnemonic = $false
+}
+$SearchPill.Controls.AddRange(@($SearchIconLbl, $SearchBox, $SearchCountLbl))
 
 # 3. Center: System Info Badge
 $CenterPanel = New-Object System.Windows.Forms.Panel -Property @{
@@ -321,7 +397,7 @@ $SysBadge = New-Object System.Windows.Forms.Label -Property @{
 }
 $CenterPanel.Controls.Add($SysBadge)
 
-# Add elements to Header
+# Assemble Header Layout
 $Header.Controls.AddRange(@($CenterPanel, $BrandPanel, $RightHeader))
 $BrandPanel.BringToFront()
 $RightHeader.BringToFront()
@@ -335,7 +411,7 @@ $Header.Add_Paint({
     $pen.Dispose()
 })
 
-# Dragging Support
+# Dragging Support across Header
 $dragHandler = {
     if ($_.Button -eq [System.Windows.Forms.MouseButtons]::Left) {
         [NativeMethods]::ReleaseCapture() | Out-Null
@@ -361,24 +437,7 @@ $Header.Add_DoubleClick($doubleClickHandler)
 $CenterPanel.Add_DoubleClick($doubleClickHandler)
 $SysBadge.Add_DoubleClick($doubleClickHandler)
 
-# --- [Sidebar Navigation Container] ---
-$Sidebar = New-Object System.Windows.Forms.Panel -Property @{
-    Dock        = "Left"
-    Width       = 240
-    BackColor   = $script:Theme.Sidebar
-    AutoScroll  = $true
-}
-$Form.Controls.Add($Sidebar)
-
-# Vertical separator right of Sidebar
-$Sidebar.Add_Paint({
-    param($s, $e)
-    $pen = New-Object System.Drawing.Pen($script:Theme.CardBorder, 1)
-    $e.Graphics.DrawLine($pen, ($s.Width - 1), 0, ($s.Width - 1), $s.Height)
-    $pen.Dispose()
-})
-
-# --- [Bottom Console Drawer] ---
+# --- [Tier 1: Bottom Console Drawer (Edge-to-Edge Full Width)] ---
 $LogContainer = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Bottom"
     Height    = 34
@@ -497,23 +556,46 @@ function Write-Log ($Msg, $Type = "Info") {
     } catch {}
 }
 
-# --- [Central Work Area & Telemetry] ---
-$MainArea = New-Object System.Windows.Forms.Panel -Property @{
+# --- [Tier 1: Main Body Container (Fills Center between Header and LogContainer)] ---
+$BodyPanel = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Fill"
     BackColor = $script:Theme.Bg
 }
-$Form.Controls.Add($MainArea)
-# Enforce exact WinForms Docking Order:
-# Index 0 (Header: Top) -> full width across top (x=0 to Width, y=0 to 66)
-# Index 1 (LogContainer: Bottom) -> full width across bottom
-# Index 2 (Sidebar: Left) -> docks below Header on the left (x=0 to 240, y=66 to bottom)
-# Index 3 (MainArea: Fill) -> fills remaining workspace (x=240, y=66)
-$Form.Controls.SetChildIndex($Header, 0)
-$Form.Controls.SetChildIndex($LogContainer, 1)
-$Form.Controls.SetChildIndex($Sidebar, 2)
-$Form.Controls.SetChildIndex($MainArea, 3)
+$Form.Controls.Add($BodyPanel)
 
-# Live Stats Bar
+# Tier 1 Strict Z-Order: Header and LogContainer take full width, BodyPanel fills center
+$Header.BringToFront()
+$LogContainer.BringToFront()
+$BodyPanel.SendToBack()
+
+# --- [Tier 2: Sidebar Navigation (Left 240px inside BodyPanel, seamlessly below BrandPanel)] ---
+$Sidebar = New-Object System.Windows.Forms.Panel -Property @{
+    Dock        = "Left"
+    Width       = 240
+    BackColor   = $script:Theme.Sidebar
+    AutoScroll  = $true
+}
+$BodyPanel.Controls.Add($Sidebar)
+
+# Vertical separator right of Sidebar
+$Sidebar.Add_Paint({
+    param($s, $e)
+    $pen = New-Object System.Drawing.Pen($script:Theme.CardBorder, 1)
+    $e.Graphics.DrawLine($pen, ($s.Width - 1), 0, ($s.Width - 1), $s.Height)
+    $pen.Dispose()
+})
+
+# --- [Tier 2: Content Area (Fills remaining space to the right of Sidebar)] ---
+$ContentArea = New-Object System.Windows.Forms.Panel -Property @{
+    Dock      = "Fill"
+    BackColor = $script:Theme.Bg
+}
+$BodyPanel.Controls.Add($ContentArea)
+
+$Sidebar.BringToFront()
+$ContentArea.SendToBack()
+
+# --- [Tier 3: Live Stats Bar (Docked Top inside ContentArea)] ---
 $TelemetryBar = New-Object System.Windows.Forms.TableLayoutPanel -Property @{
     Dock        = "Top"
     Height      = 64
@@ -526,7 +608,7 @@ $TelemetryBar = New-Object System.Windows.Forms.TableLayoutPanel -Property @{
 [void]$TelemetryBar.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 25)))
 [void]$TelemetryBar.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 25)))
 [void]$TelemetryBar.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 25)))
-$MainArea.Controls.Add($TelemetryBar)
+$ContentArea.Controls.Add($TelemetryBar)
 
 # Horizontal separator below TelemetryBar
 $TelemetryBar.Add_Paint({
@@ -566,7 +648,7 @@ function New-StatWidget($IconGlyph, $Title) {
         UseMnemonic = $false
     }
 
-    # Mini Progress Meter Bar
+    # Mini Progress Meter Bar with visible contrasting track
     $MeterTrack = New-Object System.Windows.Forms.Panel -Property @{
         Height    = 4
         Dock      = "Bottom"
@@ -599,7 +681,7 @@ $script:CpuCounter = try {
     $c
 } catch { $null }
 
-# --- [Card Engine & Registration Setup] ---
+# --- [Tier 3: View Container (Fills ContentArea strictly below TelemetryBar)] ---
 $script:AllCards       = New-Object System.Collections.Generic.List[PSObject]
 $script:ToggleCards    = New-Object System.Collections.Generic.List[PSObject]
 $script:CategoryPanels = @{}
@@ -610,9 +692,12 @@ $ViewContainer = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Fill"
     BackColor = $script:Theme.Bg
 }
-$MainArea.Controls.Add($ViewContainer)
-$ViewContainer.BringToFront()
+$ContentArea.Controls.Add($ViewContainer)
+
+$TelemetryBar.BringToFront()
+$ViewContainer.SendToBack()
 Enable-DoubleBuffering $ViewContainer
+
 
 # --- [Dynamic Responsive Layout Function] ---
 function Update-ResponsiveLayout {
@@ -906,11 +991,19 @@ function New-BaseCardPanel ($CategoryPanel, $CategoryTag, $IconGlyph, $Title, $D
         Tag       = [PSCustomObject]@{ IsHovered = $false }
     }
 
-    $tagText = if ($IsToggle) { "$($CategoryTag.ToUpper())  $($UI.Bullet)  TOGGLE" } else { $CategoryTag.ToUpper() }
+    $isWin11Only = ($CategoryTag -like "*Windows 11*")
+    $tagText = if ($isWin11Only -and -not $script:IsWin11) {
+        "WIN 11 ONLY  $($UI.Bullet)  $($CategoryTag.ToUpper())"
+    } elseif ($IsToggle) {
+        "$($CategoryTag.ToUpper())  $($UI.Bullet)  TOGGLE"
+    } else {
+        $CategoryTag.ToUpper()
+    }
+
     $TagLbl = New-Object System.Windows.Forms.Label -Property @{
         Text        = $tagText
         Location    = New-Object System.Drawing.Point(14, 10); AutoSize = $true
-        ForeColor   = $script:Theme.AccentGlow
+        ForeColor   = if ($isWin11Only -and -not $script:IsWin11) { $script:Theme.Warning } else { $script:Theme.AccentGlow }
         Font        = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
         UseMnemonic = $false
     }
@@ -1272,6 +1365,7 @@ $SearchBox.Add_TextChanged({
         foreach ($k in $script:CategoryPanels.Keys) { 
             $script:CategoryPanels[$k].Visible = ($k -eq $script:CurrentTabId) 
         }
+        if ($SearchCountLbl) { $SearchCountLbl.Visible = $false }
         foreach ($k in $script:SidebarItems.Keys) {
             $item = $script:SidebarItems[$k]
             $totalInTab = ($script:CategoryPanels[$k].Controls | Where-Object { $_ -is [System.Windows.Forms.Panel] -and $_.Tag -ne "Banner" }).Count
@@ -1342,6 +1436,12 @@ $SearchBox.Add_TextChanged({
     # Ensure only the target tab panel is visible
     foreach ($k in $script:CategoryPanels.Keys) {
         $script:CategoryPanels[$k].Visible = ($k -eq $targetTab)
+    }
+
+    [int]$totalMatched = ($tabMatchCounts.Values | Measure-Object -Sum).Sum
+    if ($SearchCountLbl) {
+        $SearchCountLbl.Text = "$totalMatched found"
+        $SearchCountLbl.Visible = $true
     }
 
     # Update active tab styling in sidebar
@@ -2179,6 +2279,69 @@ $Form.Add_FormClosing({
 
 
 
+# --- [Non-Blocking Background Auto-Update Checker] ---
+function Start-UpdateCheckAsync {
+    $asyncPS = [powershell]::Create().AddScript({
+        param($CurrentVer, $Repo)
+        try {
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls13
+            $headers = @{ "User-Agent" = "AdminWorks-AutoUpdater" }
+            $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases" -Headers $headers -TimeoutSec 5 -ErrorAction Stop
+            if ($releases -and $releases.Count -gt 0) {
+                $latest = $releases[0]
+                $latestTag = [string]$latest.tag_name
+                $cleanTag = $latestTag.TrimStart('v', 'V').Trim()
+                $cleanCur = $CurrentVer.TrimStart('v', 'V').Trim()
+                
+                $vLatest = [version]::new(0, 0)
+                $vCur = [version]::new(0, 0)
+                [void][version]::TryParse($cleanTag, [ref]$vLatest)
+                [void][version]::TryParse($cleanCur, [ref]$vCur)
+                
+                if ($vLatest -gt $vCur -or ($latestTag -and $latestTag -ne "v$CurrentVer" -and $latestTag -ne $CurrentVer)) {
+                    return @{ Available = $true; Tag = $latestTag; Url = $latest.html_url }
+                }
+            }
+        } catch {}
+        return @{ Available = $false }
+    }).AddArgument($script:AppVersion).AddArgument("KushagraKarira/AdminWorks")
+
+    $asyncRS = [runspacefactory]::CreateRunspace()
+    $asyncRS.ThreadOptions = "ReuseThread"
+    $asyncRS.Open()
+    $asyncPS.Runspace = $asyncRS
+    $handle = $asyncPS.BeginInvoke()
+
+    $checkTimer = New-Object System.Windows.Forms.Timer -Property @{Interval = 1000}
+    $checkTimer.Tag = @{ PS = $asyncPS; RS = $asyncRS; Handle = $handle }
+    $checkTimer.Add_Tick({
+        $st = $this.Tag
+        if ($st.Handle.IsCompleted) {
+            try {
+                $res = $st.PS.EndInvoke($st.Handle)
+                if ($res -and $res[0].Available) {
+                    $newTag = $res[0].Tag
+                    if ($Form -and -not $Form.IsDisposed) {
+                        [void]$Form.BeginInvoke([System.Action]{
+                            $badgeText = if ($newTag.Length -le 8) { $newTag } else { "UPDATE" }
+                            $UpdateBadge.Text = $badgeText
+                            $UpdateBadge.Visible = $true
+                            if ($UpTip) { $UpTip.SetToolTip($UpdateBadge, "Update $newTag available on GitHub! Click to install.") }
+                            Write-Log "New update available on GitHub: $newTag" "Success"
+                        })
+                    }
+                }
+            } catch {}
+            try { $st.PS.Dispose() } catch {}
+            try { $st.RS.Close(); $st.RS.Dispose() } catch {}
+            $this.Stop()
+            $this.Dispose()
+        }
+    })
+    $checkTimer.Start()
+}
+
 Write-Log "AdminWorks Pro Suite v$($script:AppVersion) loaded and ready." "Success"
+Start-UpdateCheckAsync
 [void]$Form.ShowDialog()
 
