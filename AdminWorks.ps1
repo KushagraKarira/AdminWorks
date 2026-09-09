@@ -1,7 +1,7 @@
 <#
 ================================================================================
-  ADMINWORKS PRO v5.5 - Enterprise Windows Administration & Optimization Suite
-  Compatible with Windows 10 & Windows 11
+  ADMINWORKS PRO v6.0 - Windows 11 Administration & Optimization Suite
+  Exclusively Engineered for Windows 11
 ================================================================================
 #>
 
@@ -14,19 +14,32 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
-# --- [OS Version Detection Helper] ---
-$script:AppVersion = "5.5"
+# --- [OS Version Detection & Windows 11 Gatekeeper] ---
+$script:AppVersion = "6.0"
 $script:OSBuild    = [Environment]::OSVersion.Version.Build
-$script:IsWin11    = ($script:OSBuild -ge 22000)
 
-# --- [High-DPI Scaling & Native Windows DWM Helpers] ---
+if ($script:OSBuild -lt 22000) {
+    [System.Windows.Forms.MessageBox]::Show(
+        "AdminWorks Pro v$($script:AppVersion) is exclusively designed for Windows 11 (Build 22000 or higher).`n`nDetected Windows Build: $script:OSBuild`nThis application cannot run on Windows 10 or earlier versions.",
+        "AdminWorks Pro - Windows 11 Required",
+        [System.Windows.Forms.MessageBoxButtons]::OK,
+        [System.Windows.Forms.MessageBoxIcon]::Stop
+    )
+    exit
+}
+
+# --- [High-DPI Scaling & Native Windows 11 DWM Helpers] ---
 if (-not ([System.Management.Automation.PSTypeName]'NativeMethods').Type) {
-Add-Type -TypeDefinition @"
+Add-Type -ReferencedAssemblies System.Windows.Forms, System.Drawing -TypeDefinition @"
 using System;
+using System.Drawing;
+using System.Windows.Forms;
 using System.Runtime.InteropServices;
+
 public class NativeMethods {
     [DllImport("uxtheme.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
     public static extern int SetWindowTheme(IntPtr hWnd, string pszSubAppName, string pszSubIdList);
+
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool SetProcessDpiAwarenessContext(IntPtr dpiContext);
 
@@ -57,6 +70,38 @@ public class NativeMethods {
         public int cxRightWidth;
         public int cyTopHeight;
         public int cyBottomHeight;
+    }
+}
+
+public class AdminWorksForm : Form {
+    public Control MaximizeButton { get; set; }
+
+    private const int WM_NCHITTEST = 0x0084;
+    private const int HTMAXBUTTON = 9;
+    private const int WM_NCLBUTTONDOWN = 0x00A1;
+    private const int WM_NCLBUTTONUP = 0x00A2;
+
+    protected override void WndProc(ref Message m) {
+        if (m.Msg == WM_NCHITTEST && MaximizeButton != null && !MaximizeButton.IsDisposed) {
+            int x = (short)(m.LParam.ToInt32() & 0xFFFF);
+            int y = (short)((m.LParam.ToInt32() >> 16) & 0xFFFF);
+            Point pt = MaximizeButton.PointToClient(new Point(x, y));
+            if (MaximizeButton.ClientRectangle.Contains(pt)) {
+                m.Result = (IntPtr)HTMAXBUTTON;
+                return;
+            }
+        }
+        if (m.Msg == WM_NCLBUTTONDOWN && m.WParam.ToInt32() == HTMAXBUTTON) {
+            return;
+        }
+        if (m.Msg == WM_NCLBUTTONUP && m.WParam.ToInt32() == HTMAXBUTTON) {
+            this.WindowState = (this.WindowState == FormWindowState.Maximized) 
+                ? FormWindowState.Normal 
+                : FormWindowState.Maximized;
+            m.Result = IntPtr.Zero;
+            return;
+        }
+        base.WndProc(ref m);
     }
 }
 "@
@@ -92,98 +137,63 @@ function Enable-DoubleBuffering($ctrl) {
     } catch {}
 }
 
-# --- [Theme & Design Palette] ---
+# --- [Theme & Design Palette: Windows 11 Fluent Dark] ---
 $script:Theme = @{
-    Bg            = [System.Drawing.Color]::FromArgb(13, 15, 20)       # Deep Obsidian
-    Header        = [System.Drawing.Color]::FromArgb(18, 22, 30)       # Dark Slate
-    Sidebar       = [System.Drawing.Color]::FromArgb(21, 26, 36)       # Sidebar Panel
-    SidebarActive = [System.Drawing.Color]::FromArgb(30, 38, 54)       # Active Tab
-    SidebarHover  = [System.Drawing.Color]::FromArgb(26, 33, 46)       # Hover Tab
-    Card          = [System.Drawing.Color]::FromArgb(25, 31, 42)       # Card Surface
-    CardHover     = [System.Drawing.Color]::FromArgb(34, 42, 58)       # Card Hover
-    CardBorder    = [System.Drawing.Color]::FromArgb(44, 53, 74)       # Subtle Border
-    Accent        = [System.Drawing.Color]::FromArgb(59, 130, 246)     # Electric Blue
-    AccentGlow    = [System.Drawing.Color]::FromArgb(96, 165, 250)     # Sky Blue
+    Bg            = [System.Drawing.Color]::FromArgb(15, 17, 23)       # Deep Fluent Canvas
+    Header        = [System.Drawing.Color]::FromArgb(20, 24, 33)       # Dark Slate Header
+    Sidebar       = [System.Drawing.Color]::FromArgb(23, 28, 38)       # Fluent Sidebar Panel
+    SidebarActive = [System.Drawing.Color]::FromArgb(34, 43, 60)       # Active Selected Tab
+    SidebarHover  = [System.Drawing.Color]::FromArgb(28, 35, 48)       # Hover Tab
+    Card          = [System.Drawing.Color]::FromArgb(26, 32, 44)       # Surface Card
+    CardHover     = [System.Drawing.Color]::FromArgb(36, 45, 62)       # Card Hover Surface
+    CardBorder    = [System.Drawing.Color]::FromArgb(46, 56, 78)       # Subtle 1px Border
+    Accent        = [System.Drawing.Color]::FromArgb(0, 120, 215)      # Windows 11 Blue
+    AccentGlow    = [System.Drawing.Color]::FromArgb(96, 165, 250)     # Sky Blue Accent
     Success       = [System.Drawing.Color]::FromArgb(16, 185, 129)     # Emerald Green
     Warning       = [System.Drawing.Color]::FromArgb(245, 158, 11)     # Amber Yellow
     Danger        = [System.Drawing.Color]::FromArgb(239, 68, 68)      # Crimson Red
-    TextMain      = [System.Drawing.Color]::FromArgb(243, 244, 246)    # Crisp Off-White
-    TextMuted     = [System.Drawing.Color]::FromArgb(156, 163, 175)    # Cool Gray
-    TextSubtle    = [System.Drawing.Color]::FromArgb(107, 114, 128)    # Slate Gray
-    TerminalBg    = [System.Drawing.Color]::FromArgb(7, 9, 12)         # Terminal Black
+    TextMain      = [System.Drawing.Color]::FromArgb(249, 250, 251)    # Crisp Off-White
+    TextMuted     = [System.Drawing.Color]::FromArgb(160, 168, 182)    # Slate Gray Muted
+    TextSubtle    = [System.Drawing.Color]::FromArgb(112, 122, 138)    # Slate Gray Hint
+    TerminalBg    = [System.Drawing.Color]::FromArgb(10, 12, 16)       # Terminal Dark Black
 }
 
-# Standard & Icon Fonts - Instant OS-matched mapping
-if ($script:IsWin11) {
-    $GlobalFont = "Segoe UI Variable Display"
-    $IconFont   = "Segoe Fluent Icons"
-} else {
-    $GlobalFont = "Segoe UI"
-    $IconFont   = "Segoe MDL2 Assets"
-}
+# Typography: Segoe UI Variable family (standard on Windows 11)
+$GlobalFont     = "Segoe UI Variable Display"
+$GlobalFontText = "Segoe UI Variable Text"
+$IconFont       = "Segoe Fluent Icons"
 
-# --- [Native Windows Icon Glyphs: OS-Adaptive Mapping] ---
-if ($script:IsWin11) {
-    $UI = @{
-        Bullet     = [char]0x2022
-        Dot        = [char]0x25CF
-        Close      = [char]0xE8BB
-        Maximize   = [char]0xE922
-        Restore    = [char]0xE923
-        Minimize   = [char]0xE921
-        Search     = [char]0xE721
-        Bolt       = [char]0xE945  # LightningBolt in Fluent
-        
-        # Sidebar Navigation Icons
-        Maint      = [char]0xE90F  # Repair / Wrench
-        Perf       = [char]0xE945  # LightningBolt
-        Net        = [char]0xE774  # Globe
-        Privacy    = [char]0xE72E  # Lock
-        Context    = [char]0xE8B7  # Folder
-        Hardware   = [char]0xE7F8  # Devices / Laptop
-        Apps       = [char]0xEB49  # Package
-        Admin      = [char]0xE7EE  # Diagnostic / Admin
-        
-        # Card & Widget Glyphs
-        Sparkle    = [char]0xE7FC  # Gaming / Sparkle
-        Shield     = [char]0xEA18  # Shield
-        Refresh    = [char]0xE72C  # Refresh / Sync
-        Cpu        = [char]0xE950  # Processor Chip
-        Ram        = [char]0xE7B8  # Memory
-        Disk       = [char]0xEDA2  # Hard Drive
-        Uptime     = [char]0xE823  # Clock / Time
-    }
-} else {
-    # Windows 10 (Segoe MDL2 Assets)
-    $UI = @{
-        Bullet     = [char]0x2022
-        Dot        = [char]0x25CF
-        Close      = [char]0xE8BB
-        Maximize   = [char]0xE922
-        Restore    = [char]0xE923
-        Minimize   = [char]0xE921
-        Search     = [char]0xE721
-        Bolt       = [char]0xE945  # LightningBolt (replaces unmapped 0x26A1)
-        
-        # Sidebar Navigation Icons
-        Maint      = [char]0xE90F  # Repair / Wrench
-        Perf       = [char]0xE945  # LightningBolt (replaces unmapped 0x26A1)
-        Net        = [char]0xE774  # Globe
-        Privacy    = [char]0xE72E  # Lock
-        Context    = [char]0xE8B7  # Folder
-        Hardware   = [char]0xE7F8  # DeviceLaptopNoPic
-        Apps       = [char]0xE71D  # AllApps 4-tile grid (replaces MapPin 0xEB49)
-        Admin      = [char]0xE7EF  # Admin shield badge (replaces OtherUser 0xE7EE)
-        
-        # Card & Widget Glyphs
-        Sparkle    = [char]0xE7FC  # Game controller
-        Shield     = [char]0xEA18  # Shield
-        Refresh    = [char]0xE72C  # Refresh / Sync
-        Cpu        = [char]0xEC4A  # SpeedHigh / Tachometer gauge (replaces unmapped 0xE950)
-        Ram        = [char]0xE7B8  # Package / Memory module
-        Disk       = [char]0xEDA2  # HardDrive
-        Uptime     = [char]0xE823  # Recent / Clock
-    }
+# --- [Native Windows 11 Fluent Icon Glyphs] ---
+$UI = @{
+    Bullet     = [char]0x2022
+    Dot        = [char]0x25CF
+    Close      = [char]0xE8BB
+    Maximize   = [char]0xE922
+    Restore    = [char]0xE923
+    Minimize   = [char]0xE921
+    Search     = [char]0xE721
+    Bolt       = [char]0xE945  # LightningBolt
+    
+    # Sidebar Navigation Icons
+    Maint      = [char]0xE90F  # Repair / Wrench
+    Perf       = [char]0xE945  # LightningBolt
+    Net        = [char]0xE774  # Globe
+    Privacy    = [char]0xE72E  # Lock
+    Context    = [char]0xE8B7  # Folder
+    Hardware   = [char]0xE7F8  # Devices / Laptop
+    Apps       = [char]0xEB49  # Package / Apps
+    Admin      = [char]0xE7EF  # Admin Shield Badge
+    
+    # Card & Widget Glyphs
+    Sparkle    = [char]0xE7FC  # Gaming / Sparkle
+    Shield     = [char]0xEA18  # Shield
+    Refresh    = [char]0xE72C  # Refresh / Sync
+    Cpu        = [char]0xE950  # Processor Chip
+    Ram        = [char]0xE7B8  # Memory Module
+    Disk       = [char]0xEDA2  # Hard Drive
+    Uptime     = [char]0xE823  # Clock / Time
+    Display    = [char]0xE7F4  # Display / Monitor
+    Sliders    = [char]0xE9E9  # Sliders / Settings
 }
 
 $SearchPlaceholder = "Search tools, tweaks & features..."
@@ -197,8 +207,6 @@ function Get-UserDesktopPath {
     return $desk
 }
 
-
-
 # --- [Dynamic Screen Resolution Adaptation] ---
 $ScreenBounds  = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
 $targetW       = [int]($ScreenBounds.Width * 0.85)
@@ -206,9 +214,9 @@ $targetH       = [int]($ScreenBounds.Height * 0.85)
 $InitialWidth  = [math]::Max(1024, [math]::Min(2200, $targetW))
 $InitialHeight = [math]::Max(680,  [math]::Min(1400, $targetH))
 
-# --- [Main Form Window] ---
-$Form = New-Object System.Windows.Forms.Form
-$Form.Text            = "ADMINWORKS PRO"
+# --- [Main Form Window (Windows 11 Native Shell)] ---
+$Form = New-Object AdminWorksForm
+$Form.Text            = "ADMINWORKS PRO - WINDOWS 11"
 $Form.Size            = New-Object System.Drawing.Size($InitialWidth, $InitialHeight)
 $Form.BackColor       = $script:Theme.Bg
 $Form.StartPosition   = "CenterScreen"
@@ -219,19 +227,32 @@ $Form.SuspendLayout()
 
 Enable-DoubleBuffering $Form
 
-# Apply Windows 11 Dark Mode & Fluent Rounded Corners
+# Apply Native Windows 11 DWM Attributes: Dark Mode, Rounded Corners, Native Border & Mica
 try {
+    # 1. Dark Mode (DWMWA_USE_IMMERSIVE_DARK_MODE = 20)
     $darkValue = 1
-    $res = [NativeMethods]::DwmSetWindowAttribute($Form.Handle, 20, [ref]$darkValue, 4)
-    if ($res -ne 0) {
-        [NativeMethods]::DwmSetWindowAttribute($Form.Handle, 19, [ref]$darkValue, 4) | Out-Null
+    [NativeMethods]::DwmSetWindowAttribute($Form.Handle, 20, [ref]$darkValue, 4) | Out-Null
+
+    # 2. Rounded Window Corners (DWMWA_WINDOW_CORNER_PREFERENCE = 33 -> DWMWCP_ROUND = 2)
+    $cornerPreference = 2
+    [NativeMethods]::DwmSetWindowAttribute($Form.Handle, 33, [ref]$cornerPreference, 4) | Out-Null
+
+    # 3. Hardware-Rendered Subtle Border (DWMWA_BORDER_COLOR = 34 -> COLORREF for RGB(46, 56, 78))
+    $borderColor = 0x004E382E
+    [NativeMethods]::DwmSetWindowAttribute($Form.Handle, 34, [ref]$borderColor, 4) | Out-Null
+
+    # 4. System Backdrop Type (Mica / Mica Alt)
+    if ($script:OSBuild -ge 22621) {
+        # DWMWA_SYSTEMBACKDROP_TYPE (38) -> 4 (DWMSBT_TABBEDWINDOW / Mica Alt)
+        $backdropType = 4
+        [NativeMethods]::DwmSetWindowAttribute($Form.Handle, 38, [ref]$backdropType, 4) | Out-Null
+    } else {
+        # Build 22000 (21H2) Mica Effect (1029)
+        $micaVal = 1
+        [NativeMethods]::DwmSetWindowAttribute($Form.Handle, 1029, [ref]$micaVal, 4) | Out-Null
     }
-    # DWMWA_WINDOW_CORNER_PREFERENCE (33) -> DWMWCP_ROUND (2)
-    if ($script:IsWin11) {
-        $cornerPreference = 2
-        [NativeMethods]::DwmSetWindowAttribute($Form.Handle, 33, [ref]$cornerPreference, 4) | Out-Null
-    }
-    # Native Window Drop Shadow
+
+    # 5. Native Window Drop Shadow via Extended Client Margins
     $margins = New-Object NativeMethods+MARGINS
     $margins.cxLeftWidth = 1; $margins.cxRightWidth = 1; $margins.cyTopHeight = 1; $margins.cyBottomHeight = 1
     [NativeMethods]::DwmExtendFrameIntoClientArea($Form.Handle, [ref]$margins) | Out-Null
@@ -275,7 +296,7 @@ $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
     ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 12, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false
 }
 $TitleSub = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "v5.5  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(44, 36); Size = New-Object System.Drawing.Size(192, 18)
+    Text        = "v6.0  $($UI.Bullet)  WINDOWS 11 EDITION  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(44, 36); Size = New-Object System.Drawing.Size(260, 18)
     ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 7.5, [System.Drawing.FontStyle]::Bold)
     Cursor      = [System.Windows.Forms.Cursors]::Hand; UseMnemonic = $false; AutoSize = $false; TextAlign = "MiddleLeft"
 }
@@ -351,6 +372,18 @@ $BtnMax   = New-WindowBtn $UI.Maximize 46 $script:Theme.CardHover {
 }
 $BtnMin   = New-WindowBtn $UI.Minimize 4 $script:Theme.CardHover { $Form.WindowState = "Minimized" }
 
+# Link MaximizeButton to Form for native Windows 11 Snap Layouts integration
+$Form.MaximizeButton = $BtnMax
+
+# Synchronize Maximize / Restore glyph upon state changes (including Windows Snap actions)
+$Form.Add_ClientSizeChanged({
+    if ($Form.WindowState -eq "Maximized") {
+        $BtnMax.Text = $UI.Restore
+    } else {
+        $BtnMax.Text = $UI.Maximize
+    }
+})
+
 # Search Container
 $SearchWrapper = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Fill"
@@ -423,8 +456,8 @@ $CenterPanel = New-Object System.Windows.Forms.Panel -Property @{
 }
 $OSCaption = try {
     (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -ErrorAction SilentlyContinue).ProductName
-} catch { "Windows $(if ($script:IsWin11) { '11' } else { '10' })" }
-if (-not $OSCaption) { $OSCaption = "Windows $(if ($script:IsWin11) { '11' } else { '10' })" }
+} catch { "Windows 11" }
+if (-not $OSCaption -or $OSCaption -like "*Windows 10*") { $OSCaption = "Windows 11 (Build $script:OSBuild)" }
 
 $LocalIP = "Scanning..."
 try {
@@ -1087,10 +1120,7 @@ function New-BaseCardPanel ($CategoryPanel, $CategoryTag, $IconGlyph, $Title, $D
         Tag       = [PSCustomObject]@{ IsHovered = $false }
     }
 
-    $isWin11Only = ($CategoryTag -like "*Windows 11*")
-    $tagText = if ($isWin11Only -and -not $script:IsWin11) {
-        "WIN 11 ONLY  $($UI.Bullet)  $($CategoryTag.ToUpper())"
-    } elseif ($IsToggle) {
+    $tagText = if ($IsToggle) {
         "$($CategoryTag.ToUpper())  $($UI.Bullet)  TOGGLE"
     } else {
         $CategoryTag.ToUpper()
@@ -1099,7 +1129,7 @@ function New-BaseCardPanel ($CategoryPanel, $CategoryTag, $IconGlyph, $Title, $D
     $TagLbl = New-Object System.Windows.Forms.Label -Property @{
         Text        = $tagText
         Location    = New-Object System.Drawing.Point(14, 10); AutoSize = $true
-        ForeColor   = if ($isWin11Only -and -not $script:IsWin11) { $script:Theme.Warning } else { $script:Theme.AccentGlow }
+        ForeColor   = $script:Theme.AccentGlow
         Font        = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
         UseMnemonic = $false
     }
@@ -1129,7 +1159,7 @@ function New-BaseCardPanel ($CategoryPanel, $CategoryTag, $IconGlyph, $Title, $D
         Size         = New-Object System.Drawing.Size(292, 58)
         Anchor       = [System.Windows.Forms.AnchorStyles]"Top, Left, Right"
         ForeColor    = $script:Theme.TextMuted
-        Font         = New-Object System.Drawing.Font($GlobalFont, 8)
+        Font         = New-Object System.Drawing.Font($GlobalFontText, 8)
         AutoEllipsis = $true
         UseMnemonic  = $false
     }
@@ -1702,6 +1732,43 @@ New-TweakCard $P_Perf $UI.Hardware "Disable USB Suspend" "Hardware Latency" "Dis
     Write-Log "USB Selective Suspend disabled." "Success"
 }
 
+New-ToggleCard $P_Perf $UI.Display "Auto HDR for Gaming" "DirectX Gaming" "Toggles system-wide Auto HDR for DirectX 11 and 12 games on compatible displays." `
+    { (Get-ItemProperty "HKCU:\Software\Microsoft\Direct3D" -ErrorAction SilentlyContinue).EnableAutoHDR -eq 1 } `
+    {
+        reg add "HKCU\Software\Microsoft\Direct3D" /v "EnableAutoHDR" /t REG_DWORD /d 1 /f | Out-Null
+        Write-Log "Auto HDR for DirectX titles enabled." "Success"
+    } `
+    {
+        reg add "HKCU\Software\Microsoft\Direct3D" /v "EnableAutoHDR" /t REG_DWORD /d 0 /f | Out-Null
+        Write-Log "Auto HDR for DirectX titles disabled." "Warning"
+    }
+
+New-ToggleCard $P_Perf $UI.Sparkle "Windowed Game Latency" "Gaming Boost" "Upgrades presentation model for windowed games in Windows 11 to minimize latency & enable VRR." `
+    { (Get-ItemProperty "HKCU:\Software\Microsoft\DirectX\UserGpuPreferences" -ErrorAction SilentlyContinue).DirectXUserGlobalSettings -like "*SwapEffectUpgradeEnable=1*" } `
+    {
+        reg add "HKCU\Software\Microsoft\DirectX\UserGpuPreferences" /v "DirectXUserGlobalSettings" /t REG_SZ /d "SwapEffectUpgradeEnable=1;" /f | Out-Null
+        Write-Log "Windowed Game Optimizations enabled." "Success"
+    } `
+    {
+        reg delete "HKCU\Software\Microsoft\DirectX\UserGpuPreferences" /v "DirectXUserGlobalSettings" /f 2>$null | Out-Null
+        Write-Log "Windowed Game Optimizations restored to default." "Warning"
+    }
+
+New-TweakCard $P_Perf $UI.Shield "Core Isolation (HVCI) Audit" "Security & VBS" "Audits Virtualization-Based Security (VBS) and Hypervisor-Enforced Code Integrity (Memory Integrity)." {
+    Write-Log "Auditing Windows 11 Virtualization-Based Security (VBS)..." "Exec"
+    $dg = Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard -ErrorAction SilentlyContinue
+    if ($dg) {
+        $vbsStatus = switch ($dg.VirtualizationBasedSecurityStatus) { 0 { "Disabled" } 1 { "Enabled (Configured)" } 2 { "Running (Active)" } Default { "Unknown" } }
+        $vbsLogType = if ($dg.VirtualizationBasedSecurityStatus -eq 2) { "Success" } else { "Warning" }
+        Write-Log "VBS Security Status: $vbsStatus" $vbsLogType
+        $hvci = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" -ErrorAction SilentlyContinue).Enabled
+        $hvciStatus = if ($hvci -eq 1) { "Enabled (Memory Integrity Active)" } else { "Disabled" }
+        Write-Log "Memory Integrity (HVCI): $hvciStatus" (if ($hvci -eq 1) { "Success" } else { "Info" })
+    } else {
+        Write-Log "DeviceGuard VBS provider not accessible." "Warning"
+    }
+}
+
 # ------------------------------------------------------------------------------
 # 3. NETWORKING & DNS
 # ------------------------------------------------------------------------------
@@ -1824,7 +1891,8 @@ New-TweakCard $P_Privacy $UI.Apps "Universal OEM Debloat" "App Purge" "Removes c
         "*Disney*", "*PrimeVideo*", "*Spotify*", "*Netflix*", "*Hulu*", "*CandyCrush*",
         "*BubbleWitch*", "*MarchOfEmpires*", "*HiddenCity*", "*Asphalt*", "*MinecraftUWP*",
         "*McAfee*", "*Norton*", "*Dropbox*", "*Evernote*", "*Clipchamp*", "*BingNews*",
-        "*BingFinance*", "*BingSports*"
+        "*BingFinance*", "*BingSports*", "*DevHome*", "*OutlookForWindows*", "*Copilot*",
+        "*QuickAssist*", "*Todos*", "*PowerAutomateDesktop*", "*FeedbackHub*"
     )
     [int]$count = 0
     $provPackages = Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
@@ -1842,7 +1910,7 @@ New-TweakCard $P_Privacy $UI.Apps "Universal OEM Debloat" "App Purge" "Removes c
     Write-Log "$count bloatware packages purged." "Success"
 }
 
-New-ToggleCard $P_Privacy $UI.Search "Disable Copilot & Web Search" "Windows 11 UI" "Toggles Windows Copilot, Taskbar Widgets, and Start Menu Bing Web search." `
+New-ToggleCard $P_Privacy $UI.Search "Disable Copilot & Web Search" "Search & AI" "Toggles Windows Copilot, Taskbar Widgets, and Start Menu Bing Web search." `
     { (Get-ItemProperty 'HKCU:\Software\Policies\Microsoft\Windows\WindowsCopilot' -ErrorAction SilentlyContinue).TurnOffWindowsCopilot -eq 1 } `
     {
         reg add "HKCU\Software\Policies\Microsoft\Windows\WindowsCopilot" /v "TurnOffWindowsCopilot" /t REG_DWORD /d 1 /f | Out-Null
@@ -1859,15 +1927,27 @@ New-ToggleCard $P_Privacy $UI.Search "Disable Copilot & Web Search" "Windows 11 
         Write-Log "Windows Copilot and Search Suggestions restored." "Warning"
     }
 
-New-TweakCard $P_Privacy $UI.Privacy "Disable Recall & AI Tracking" "Privacy" "Disables Windows Recall AI screen recording and snapshot feature." {
-    $isWin11 = ([Environment]::OSVersion.Version.Build -ge 22000)
-    if ($isWin11 -and (Get-WindowsOptionalFeature -Online -FeatureName "Recall" -ErrorAction SilentlyContinue)) {
+New-TweakCard $P_Privacy $UI.Privacy "Disable Recall & AI Tracking" "Privacy" "Disables Windows 11 Recall AI screen recording, snapshots, and background image analysis." {
+    if (Get-WindowsOptionalFeature -Online -FeatureName "Recall" -ErrorAction SilentlyContinue) {
         Disable-WindowsOptionalFeature -Online -FeatureName "Recall" -Remove -NoRestart -ErrorAction SilentlyContinue | Out-Null
-        Write-Log "Windows Recall AI snapshot tracking disabled." "Success"
+        Write-Log "Windows Recall AI feature uninstalled/removed." "Success"
     } else {
-        Write-Log "Windows Recall is not present or applicable on this build." "Info"
+        Write-Log "Windows Recall feature not present on this package image." "Info"
     }
+    reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsAI" /v "DisableAIDataAnalysis" /t REG_DWORD /d 1 /f | Out-Null
+    Write-Log "Windows Recall and AI telemetry policies disabled." "Success"
 }
+
+New-ToggleCard $P_Privacy $UI.Shield "Disable AI Data Analysis" "Windows 11 AI" "Toggles system-wide model training, telemetry feedback, and diagnostic AI analysis policies." `
+    { (Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsAI" -ErrorAction SilentlyContinue).DisableAIDataAnalysis -eq 1 } `
+    {
+        reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsAI" /v "DisableAIDataAnalysis" /t REG_DWORD /d 1 /f | Out-Null
+        Write-Log "Windows 11 AI Data Analysis policy disabled." "Success"
+    } `
+    {
+        reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsAI" /v "DisableAIDataAnalysis" /f 2>$null | Out-Null
+        Write-Log "Windows 11 AI Data Analysis policy restored." "Warning"
+    }
 
 New-ToggleCard $P_Privacy $UI.Shield "Kill Telemetry & DiagTrack" "Privacy" "Toggles Connected User Experiences (DiagTrack), dmwappushservice, and telemetry." `
     { (Get-Service "DiagTrack" -ErrorAction SilentlyContinue).StartType -eq "Disabled" } `
@@ -1932,7 +2012,7 @@ New-ToggleCard $P_Privacy $UI.Admin "Activity History & Timeline" "Privacy" "Tog
 # ------------------------------------------------------------------------------
 $P_Context = $script:CategoryPanels["Context"]
 
-New-ToggleCard $P_Context $UI.Context "Classic Context Menu" "Windows 11 UI" "Toggles the Windows 10 full right-click context menu without 'Show more options'." `
+New-ToggleCard $P_Context $UI.Context "Classic Context Menu" "Context Menu" "Toggles the Windows 10 full right-click context menu without 'Show more options'." `
     { Test-Path "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" } `
     {
         reg add "HKCU\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" /f /ve | Out-Null
@@ -2003,7 +2083,7 @@ New-ToggleCard $P_Context $UI.Context "File Explorer Pro Mode" "File System" "To
         Write-Log "File Explorer returned to default view." "Warning"
     }
 
-New-ToggleCard $P_Context $UI.Context "Explorer Compact View" "Windows 11 UI" "Toggles dense compact folder row spacing in Windows 11 File Explorer." `
+New-ToggleCard $P_Context $UI.Context "Explorer Compact View" "File Explorer" "Toggles dense compact folder row spacing in Windows 11 File Explorer." `
     { (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -ErrorAction SilentlyContinue).UseCompactMode -eq 1 } `
     {
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "UseCompactMode" -Value 1
@@ -2014,6 +2094,62 @@ New-ToggleCard $P_Context $UI.Context "Explorer Compact View" "Windows 11 UI" "T
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "UseCompactMode" -Value 0
         Restart-Explorer
         Write-Log "File Explorer Compact View disabled." "Warning"
+    }
+
+New-ToggleCard $P_Context $UI.Context "Taskbar Align Left" "Taskbar Layout" "Toggles Windows 11 taskbar icons between standard Center alignment and classic Left alignment." `
+    { (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -ErrorAction SilentlyContinue).TaskbarAl -eq 0 } `
+    {
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarAl" -Value 0
+        Restart-Explorer
+        Write-Log "Taskbar aligned to Left." "Success"
+    } `
+    {
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarAl" -Value 1
+        Restart-Explorer
+        Write-Log "Taskbar aligned to Center." "Warning"
+    }
+
+New-ToggleCard $P_Context $UI.Context "Taskbar Never Combine" "Taskbar Behavior" "Shows individual window labels on the taskbar without combining identical application icons." `
+    { (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -ErrorAction SilentlyContinue).TaskbarGlomLevel -eq 2 } `
+    {
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarGlomLevel" -Value 2
+        Restart-Explorer
+        Write-Log "Taskbar buttons set to Never Combine." "Success"
+    } `
+    {
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarGlomLevel" -Value 0
+        Restart-Explorer
+        Write-Log "Taskbar buttons set to Always Combine." "Warning"
+    }
+
+New-ToggleCard $P_Context $UI.Context "Hide Start Recommendations" "Start Menu" "Hides recommended recent files, newly installed app suggestions, and tips in the Windows 11 Start Menu." `
+    { (Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer" -ErrorAction SilentlyContinue).HideRecommendedSection -eq 1 } `
+    {
+        reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\Explorer" /v "HideRecommendedSection" /t REG_DWORD /d 1 /f | Out-Null
+        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v "Start_TrackDocs" /t REG_DWORD /d 0 /f | Out-Null
+        Restart-Explorer
+        Write-Log "Start Menu Recommended section hidden." "Success"
+    } `
+    {
+        reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\Explorer" /v "HideRecommendedSection" /f 2>$null | Out-Null
+        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v "Start_TrackDocs" /t REG_DWORD /d 1 /f | Out-Null
+        Restart-Explorer
+        Write-Log "Start Menu Recommended section restored." "Warning"
+    }
+
+New-ToggleCard $P_Context $UI.Context "Hide Widgets & Chat" "Taskbar Items" "Removes the Widgets weather feed and Microsoft Teams Chat icon from the Windows 11 Taskbar." `
+    { (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -ErrorAction SilentlyContinue).TaskbarDa -eq 0 -and (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -ErrorAction SilentlyContinue).TaskbarMn -eq 0 } `
+    {
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarDa" -Value 0
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarMn" -Value 0
+        Restart-Explorer
+        Write-Log "Widgets and Chat taskbar icons hidden." "Success"
+    } `
+    {
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarDa" -Value 1
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarMn" -Value 1
+        Restart-Explorer
+        Write-Log "Widgets and Chat taskbar icons restored." "Warning"
     }
 
 # ------------------------------------------------------------------------------
@@ -2076,6 +2212,35 @@ New-TweakCard $P_Hw $UI.Disk "Disk Sector & Partition Audit" "Drive Specs" "Audi
         Write-Log "Disk #$($_.Number): $($_.FriendlyName) | Style: $($_.PartitionStyle) | SectorSize: $($_.PhysicalSectorSize)B" "Info"
     }
     Write-Log "Storage geometry audit complete." "Success"
+}
+
+New-TweakCard $P_Hw $UI.Shield "TPM 2.0 & Platform Security" "Security Hardware" "Audits Trusted Platform Module (TPM 2.0) chip presence, specification version, and Secure Boot state." {
+    Write-Log "Auditing TPM 2.0 & Platform Security..." "Exec"
+    $tpm = Get-Tpm -ErrorAction SilentlyContinue
+    if ($tpm) {
+        $st = if ($tpm.TpmReady) { "Success" } else { "Warning" }
+        Write-Log "TPM Present: $($tpm.TpmPresent) | Ready: $($tpm.TpmReady) | Enabled: $($tpm.TpmEnabled)" $st
+        $tpmVer = (Get-CimInstance -Namespace "root\cimv2\Security\MicrosoftTpm" -ClassName Win32_Tpm -ErrorAction SilentlyContinue).SpecVersion
+        if ($tpmVer) { Write-Log "TPM Spec Version: $tpmVer" "Info" }
+    } else {
+        Write-Log "TPM module not detected or query restricted." "Warning"
+    }
+    $sb = try { Confirm-SecureBootUEFI } catch { "Not Supported" }
+    Write-Log "UEFI Secure Boot Status: $sb" (if ($sb -eq $true) { "Success" } else { "Warning" })
+}
+
+New-TweakCard $P_Hw $UI.Disk "DirectStorage BypassIO Audit" "Storage Architecture" "Inspects Windows 11 BypassIO status on System Drive (C:) for ultra-fast NVMe game loading." {
+    Write-Log "Checking DirectStorage BypassIO storage pipeline on C:..." "Exec"
+    try {
+        $res = fsutil bypassIo state C: 2>&1
+        $res | ForEach-Object {
+            if ($_ -match "BypassIo is supported") { Write-Log $_ "Success" }
+            elseif ($_ -match "Error|Not supported|Incompatible") { Write-Log $_ "Warning" }
+            else { Write-Log $_ "Info" }
+        }
+    } catch {
+        Write-Log "BypassIO query failed: $($_.Exception.Message)" "Error"
+    }
 }
 
 # ------------------------------------------------------------------------------
@@ -2165,6 +2330,13 @@ New-TweakCard $P_Apps $UI.Shield "Install SysAdmin Bundle" "Winget Bundle" "Inst
         winget install $p --silent --accept-package-agreements --accept-source-agreements | Out-Null
     }
     Write-Log "SysAdmin Diagnostics Bundle installed." "Success"
+}
+
+New-TweakCard $P_Apps $UI.Admin "Install / Update WSL 2" "Linux Subsystem" "Installs or updates the Windows Subsystem for Linux (WSL 2) kernel package directly." {
+    Write-Log "Checking and updating Windows Subsystem for Linux (WSL 2)..." "Exec"
+    wsl --update 2>&1 | ForEach-Object { Write-Log $_ "Info" }
+    wsl --status 2>&1 | ForEach-Object { Write-Log $_ "Info" }
+    Write-Log "WSL 2 verification complete." "Success"
 }
 
 # ------------------------------------------------------------------------------
@@ -2447,3 +2619,4 @@ function Start-UpdateCheckAsync {
 Write-Log "AdminWorks Pro Suite v$($script:AppVersion) loaded and ready." "Success"
 Start-UpdateCheckAsync
 [void]$Form.ShowDialog()
+
