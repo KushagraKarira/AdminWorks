@@ -1,6 +1,6 @@
 <#
 ================================================================================
-  ADMINWORKS PRO v5.3 - Enterprise Windows Administration & Optimization Suite
+  ADMINWORKS PRO v5.4 - Enterprise Windows Administration & Optimization Suite
   Compatible with Windows 10 & Windows 11
 ================================================================================
 #>
@@ -15,7 +15,7 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # --- [OS Version Detection Helper] ---
-$script:AppVersion = "5.3"
+$script:AppVersion = "5.4"
 $script:OSBuild    = [Environment]::OSVersion.Version.Build
 $script:IsWin11    = ($script:OSBuild -ge 22000)
 
@@ -195,13 +195,13 @@ $LogoIcon = New-Object System.Windows.Forms.Label -Property @{
     ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 14, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false
 }
 $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "ADMINWORKS"; Location = New-Object System.Drawing.Point(44, 13); AutoSize = $true
+    Text        = "ADMINWORKS"; Location = New-Object System.Drawing.Point(44, 12); AutoSize = $true
     ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 12, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false
 }
 $TitleSub = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "v5.3  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(44, 37); AutoSize = $true
+    Text        = "v5.4  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(44, 36); Size = New-Object System.Drawing.Size(192, 18)
     ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 7.5, [System.Drawing.FontStyle]::Bold)
-    Cursor      = [System.Windows.Forms.Cursors]::Hand; UseMnemonic = $false
+    Cursor      = [System.Windows.Forms.Cursors]::Hand; UseMnemonic = $false; AutoSize = $false; TextAlign = "MiddleLeft"
 }
 $TitleSub.Add_Click({ Start-Process "https://github.com/KushagraKarira/AdminWorks/releases" })
 try {
@@ -503,8 +503,15 @@ $MainArea = New-Object System.Windows.Forms.Panel -Property @{
     BackColor = $script:Theme.Bg
 }
 $Form.Controls.Add($MainArea)
-$MainArea.BringToFront()
-$Header.SendToBack()
+# Enforce exact WinForms Docking Order:
+# Index 0 (Header: Top) -> full width across top (x=0 to Width, y=0 to 66)
+# Index 1 (LogContainer: Bottom) -> full width across bottom
+# Index 2 (Sidebar: Left) -> docks below Header on the left (x=0 to 240, y=66 to bottom)
+# Index 3 (MainArea: Fill) -> fills remaining workspace (x=240, y=66)
+$Form.Controls.SetChildIndex($Header, 0)
+$Form.Controls.SetChildIndex($LogContainer, 1)
+$Form.Controls.SetChildIndex($Sidebar, 2)
+$Form.Controls.SetChildIndex($MainArea, 3)
 
 # Live Stats Bar
 $TelemetryBar = New-Object System.Windows.Forms.TableLayoutPanel -Property @{
@@ -561,9 +568,9 @@ function New-StatWidget($IconGlyph, $Title) {
 
     # Mini Progress Meter Bar
     $MeterTrack = New-Object System.Windows.Forms.Panel -Property @{
-        Height    = 3
+        Height    = 4
         Dock      = "Bottom"
-        BackColor = [System.Drawing.Color]::FromArgb(18, 22, 30)
+        BackColor = [System.Drawing.Color]::FromArgb(35, 44, 62)
     }
     $MeterFill = New-Object System.Windows.Forms.Panel -Property @{
         Dock      = "Left"
@@ -729,6 +736,8 @@ function Invoke-AdminWorksAction ($ActionCode, $Button, [scriptblock]$OnComplete
             Write-Log "Checking for AdminWorks update from GitHub Releases..." "Exec"
             $repo = "KushagraKarira/AdminWorks"
             $releasesPage = "https://github.com/$repo/releases"
+            $directReleaseUrl = "https://github.com/$repo/releases/download/v5.3.57/AdminWorks.exe"
+            $v54ReleaseUrl = "https://github.com/$repo/releases/download/v5.4/AdminWorks.exe"
             $latestDownloadUrl = "https://github.com/$repo/releases/latest/download/AdminWorks.exe"
             $downloadUrl = $directReleaseUrl
 
@@ -891,7 +900,7 @@ function Invoke-AdminWorksAction ($ActionCode, $Button, [scriptblock]$OnComplete
 # --- [Card Layout Factory Helper] ---
 function New-BaseCardPanel ($CategoryPanel, $CategoryTag, $IconGlyph, $Title, $Desc, $IsToggle) {
     $P = New-Object System.Windows.Forms.Panel -Property @{
-        Size      = New-Object System.Drawing.Size(320, 154)
+        Size      = New-Object System.Drawing.Size(320, 162)
         BackColor = $script:Theme.Card
         Margin    = New-Object System.Windows.Forms.Padding(6)
         Tag       = [PSCustomObject]@{ IsHovered = $false }
@@ -928,7 +937,7 @@ function New-BaseCardPanel ($CategoryPanel, $CategoryTag, $IconGlyph, $Title, $D
     $DescLbl = New-Object System.Windows.Forms.Label -Property @{
         Text         = $Desc
         Location     = New-Object System.Drawing.Point(14, 52)
-        Size         = New-Object System.Drawing.Size(292, 52)
+        Size         = New-Object System.Drawing.Size(292, 58)
         Anchor       = [System.Windows.Forms.AnchorStyles]"Top, Left, Right"
         ForeColor    = $script:Theme.TextMuted
         Font         = New-Object System.Drawing.Font($GlobalFont, 8)
@@ -1130,7 +1139,7 @@ foreach ($tab in $TabList) {
         FlowDirection = "LeftToRight"
         WrapContents  = $false
         BackColor     = [System.Drawing.Color]::Transparent
-        Margin        = New-Object System.Windows.Forms.Padding(6, 4, 6, 12)
+        Margin        = New-Object System.Windows.Forms.Padding(6, 8, 6, 16)
         Tag           = "Banner"
     }
     $BannerIcon = New-Object System.Windows.Forms.Label -Property @{
