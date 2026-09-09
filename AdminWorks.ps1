@@ -254,8 +254,7 @@ $UpdateBadge = New-Object System.Windows.Forms.Label -Property @{
     UseMnemonic = $false
 }
 $UpdateBadge.Add_Click({
-    Select-Tab "Apps"
-    Update-AdminWorksSuite
+    Update-AdminWorksSuite $this
 })
 try {
     $UpTip = New-Object System.Windows.Forms.ToolTip
@@ -399,9 +398,9 @@ $CenterPanel.Controls.Add($SysBadge)
 
 # Assemble Header Layout
 $Header.Controls.AddRange(@($CenterPanel, $BrandPanel, $RightHeader))
-$BrandPanel.BringToFront()
-$RightHeader.BringToFront()
-$CenterPanel.SendToBack()
+$BrandPanel.SendToBack()
+$RightHeader.SendToBack()
+$CenterPanel.BringToFront()
 
 # Horizontal separator below Header
 $Header.Add_Paint({
@@ -564,9 +563,9 @@ $BodyPanel = New-Object System.Windows.Forms.Panel -Property @{
 $Form.Controls.Add($BodyPanel)
 
 # Tier 1 Strict Z-Order: Header and LogContainer take full width, BodyPanel fills center
-$Header.BringToFront()
-$LogContainer.BringToFront()
-$BodyPanel.SendToBack()
+$Header.SendToBack()
+$LogContainer.SendToBack()
+$BodyPanel.BringToFront()
 
 # --- [Tier 2: Sidebar Navigation (Left 240px inside BodyPanel, seamlessly below BrandPanel)] ---
 $Sidebar = New-Object System.Windows.Forms.Panel -Property @{
@@ -575,6 +574,9 @@ $Sidebar = New-Object System.Windows.Forms.Panel -Property @{
     BackColor   = $script:Theme.Sidebar
     AutoScroll  = $true
 }
+$Sidebar.HorizontalScroll.Enabled = $false
+$Sidebar.HorizontalScroll.Visible = $false
+$Sidebar.HorizontalScroll.Maximum = 0
 $BodyPanel.Controls.Add($Sidebar)
 
 # Vertical separator right of Sidebar
@@ -592,8 +594,8 @@ $ContentArea = New-Object System.Windows.Forms.Panel -Property @{
 }
 $BodyPanel.Controls.Add($ContentArea)
 
-$Sidebar.BringToFront()
-$ContentArea.SendToBack()
+$Sidebar.SendToBack()
+$ContentArea.BringToFront()
 
 # --- [Tier 3: Live Stats Bar (Docked Top inside ContentArea)] ---
 $TelemetryBar = New-Object System.Windows.Forms.TableLayoutPanel -Property @{
@@ -693,9 +695,13 @@ $ViewContainer = New-Object System.Windows.Forms.Panel -Property @{
     BackColor = $script:Theme.Bg
 }
 $ContentArea.Controls.Add($ViewContainer)
+$ViewContainer.Add_MouseEnter({
+    $activePanel = $script:CategoryPanels[$script:CurrentTabId]
+    if ($activePanel -and $activePanel.CanFocus) { [void]$activePanel.Focus() }
+})
 
-$TelemetryBar.BringToFront()
-$ViewContainer.SendToBack()
+$TelemetryBar.SendToBack()
+$ViewContainer.BringToFront()
 Enable-DoubleBuffering $ViewContainer
 
 
@@ -703,8 +709,12 @@ Enable-DoubleBuffering $ViewContainer
 function Update-ResponsiveLayout {
     if (-not $ViewContainer -or $ViewContainer.ClientSize.Width -le 100) { return }
 
-    # Available width strictly inside ViewContainer bounds (padding 16 left + 16 right)
-    $availWidth = $ViewContainer.ClientSize.Width - 32
+    # Reserve space for vertical scrollbar so cards never cause horizontal overflow
+    $sbWidth = [System.Windows.Forms.SystemInformation]::VerticalScrollBarWidth
+    if ($sbWidth -lt 18) { $sbWidth = 18 }
+
+    # Available width strictly inside ViewContainer bounds (padding 16 left + 16 right + scrollbar)
+    $availWidth = $ViewContainer.ClientSize.Width - 32 - $sbWidth
     if ($availWidth -lt 280) { $availWidth = 280 }
 
     # Dynamically scale columns for large screens (1080p, 1440p, 4K, 5K, ultrawide)
@@ -723,7 +733,7 @@ function Update-ResponsiveLayout {
     if ($activePanel) { 
         $activePanel.SuspendLayout() 
 
-        # Disable horizontal scroll
+        # Disable horizontal scroll, keep vertical scroll intact
         $activePanel.HorizontalScroll.Enabled = $false
         $activePanel.HorizontalScroll.Visible = $false
         $activePanel.HorizontalScroll.Maximum = 0
@@ -735,20 +745,22 @@ function Update-ResponsiveLayout {
         }
         $activePanel.ResumeLayout($true)
 
-        # Hide scrollbars completely while keeping vertical mouse-wheel scroll intact
+        # Strictly hide horizontal scrollbar (SB_HORZ = 0) while keeping vertical scrollbar visible and functional
         try {
-            [void][NativeMethods]::ShowScrollBar($activePanel.Handle, 3, $false)
+            [void][NativeMethods]::ShowScrollBar($activePanel.Handle, 0, $false)
         } catch {}
     }
 }
 $ViewContainer.Add_SizeChanged({ Update-ResponsiveLayout })
 
 # --- [Centralized Async Action Execution Engine] ---
-function Invoke-AdminWorksAction ($ActionCode, $Button, [scriptblock]$OnComplete) {
-    $Button.Enabled = $false
-    $Button.Text = "RUNNING..."
-    $Button.BackColor = $script:Theme.Warning
-    $Button.ForeColor = [System.Drawing.Color]::Black
+function Invoke-AdminWorksAction ($ActionCode, $Button = $null, [scriptblock]$OnComplete = $null) {
+    if ($Button -and -not $Button.IsDisposed) {
+        $Button.Enabled = $false
+        $Button.Text = "RUNNING..."
+        $Button.BackColor = $script:Theme.Warning
+        $Button.ForeColor = [System.Drawing.Color]::Black
+    }
 
     # Auto-expand console drawer to show live execution
     if ($LogContainer.Height -le 40) {
@@ -980,6 +992,40 @@ function Invoke-AdminWorksAction ($ActionCode, $Button, [scriptblock]$OnComplete
         }
     })
     $Timer.Start()
+}
+
+# --- [Top-Level Suite Updater Trigger Helper] ---
+function Update-AdminWorksSuite ($TriggerButton = $null) {
+    Select-Tab "Apps"
+    if ($LogContainer -and $LogContainer.Height -le 40) {
+        $LogContainer.Height = 180
+        if ($BtnToggleDrawer) { $BtnToggleDrawer.Text = "COLLAPSE" }
+    }
+
+    $btn = $TriggerButton
+    if (-not $btn) {
+        $appsPanel = $script:CategoryPanels["Apps"]
+        if ($appsPanel) {
+            $updateCard = $appsPanel.Controls | Where-Object { $_ -is [System.Windows.Forms.Panel] -and $_.Tag -ne "Banner" } | Select-Object -First 1
+            if ($updateCard) {
+                $btn = $updateCard.Controls | Where-Object { $_ -is [System.Windows.Forms.Button] } | Select-Object -First 1
+            }
+        }
+    }
+    if (-not $btn) { $btn = $UpdateBadge }
+
+    Invoke-AdminWorksAction "Update-AdminWorksSuite" $btn {
+        param($b)
+        if ($b -and -not $b.IsDisposed) {
+            $b.Text = "UPDATED"
+            $b.BackColor = $script:Theme.Success
+            $b.ForeColor = [System.Drawing.Color]::White
+        }
+        if ($UpdateBadge -and -not $UpdateBadge.IsDisposed) {
+            $UpdateBadge.Text = "UPDATED"
+            $UpdateBadge.BackColor = $script:Theme.Success
+        }
+    }
 }
 
 # --- [Card Layout Factory Helper] ---
@@ -1264,22 +1310,25 @@ foreach ($tab in $TabList) {
     $Flow.SetFlowBreak($Banner, $true)
     Enable-DoubleBuffering $Flow
 
-    # Strictly suppress horizontal scroll and hide visible scrollbar
+    # Strictly suppress horizontal scroll while preserving vertical scrolling
+    $Flow.WrapContents  = $true
+    $Flow.FlowDirection = "LeftToRight"
     $Flow.HorizontalScroll.Enabled = $false
     $Flow.HorizontalScroll.Visible = $false
     $Flow.HorizontalScroll.Maximum = 0
 
-    $hideScrollBars = {
+    $hideHorizontalScrollBar = {
         param($s, $e)
         $s.HorizontalScroll.Enabled = $false
         $s.HorizontalScroll.Visible = $false
         $s.HorizontalScroll.Maximum = 0
         try {
-            [void][NativeMethods]::ShowScrollBar($s.Handle, 3, $false)
+            [void][NativeMethods]::ShowScrollBar($s.Handle, 0, $false)
         } catch {}
     }
-    $Flow.Add_Paint($hideScrollBars)
-    $Flow.Add_Layout($hideScrollBars)
+    $Flow.Add_Paint($hideHorizontalScrollBar)
+    $Flow.Add_Layout($hideHorizontalScrollBar)
+    $Flow.Add_MouseEnter({ if ($this.CanFocus) { [void]$this.Focus() } })
 
     # Sidebar Item Panel
     $ItemPanel = New-Object System.Windows.Forms.Panel -Property @{
@@ -2344,4 +2393,3 @@ function Start-UpdateCheckAsync {
 Write-Log "AdminWorks Pro Suite v$($script:AppVersion) loaded and ready." "Success"
 Start-UpdateCheckAsync
 [void]$Form.ShowDialog()
-
