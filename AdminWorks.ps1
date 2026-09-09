@@ -37,6 +37,12 @@ using System.Windows.Forms;
 using System.Runtime.InteropServices;
 
 public class NativeMethods {
+    [DllImport("uxtheme.dll", EntryPoint = "#135", SetLastError = true)]
+    public static extern int SetPreferredAppMode(int preferredAppMode);
+
+    [DllImport("uxtheme.dll", EntryPoint = "#133", SetLastError = true)]
+    public static extern bool AllowDarkModeForWindow(IntPtr hWnd, bool allow);
+
     [DllImport("uxtheme.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
     public static extern int SetWindowTheme(IntPtr hWnd, string pszSubAppName, string pszSubIdList);
 
@@ -107,16 +113,7 @@ public class AdminWorksForm : Form {
 "@
 }
 
-if (-not ([System.Management.Automation.PSTypeName]'UxThemeNative').Type) {
-Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-public class UxThemeNative {
-    [DllImport("uxtheme.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
-    public static extern int SetWindowTheme(IntPtr hWnd, string pszSubAppName, string pszSubIdList);
-}
-"@
-}
+
 
 try {
     # Per-Monitor V2 DPI Awareness (-4) for sharp text/UI rendering on all display resolutions
@@ -127,6 +124,12 @@ try {
     try { [NativeMethods]::SetProcessDPIAware() | Out-Null } catch {}
 }
 [System.Windows.Forms.Application]::EnableVisualStyles()
+
+# Force process-wide Dark Mode in Windows 11 (PreferredAppMode: ForceDark = 2)
+# This natively themes standard Win32 non-client scrollbars, menus, and controls to Dark Mode
+try {
+    [NativeMethods]::SetPreferredAppMode(2) | Out-Null
+} catch {}
 
 function Enable-DoubleBuffering($ctrl) {
     if (-not $ctrl) { return }
@@ -256,6 +259,9 @@ try {
     $margins = New-Object NativeMethods+MARGINS
     $margins.cxLeftWidth = 1; $margins.cxRightWidth = 1; $margins.cyTopHeight = 1; $margins.cyBottomHeight = 1
     [NativeMethods]::DwmExtendFrameIntoClientArea($Form.Handle, [ref]$margins) | Out-Null
+
+    # 6. Enable Dark Mode non-client rendering for Form window
+    [NativeMethods]::AllowDarkModeForWindow($Form.Handle, $true) | Out-Null
 } catch {}
 
 # Outer 1px accent border for crisp separation against dark desktops
@@ -281,10 +287,10 @@ $Header = New-Object System.Windows.Forms.Panel -Property @{
 }
 $Form.Controls.Add($Header)
 
-# 1. Left: Brand Container (Anchored at top-left, 240px wide to match Sidebar below)
+# 1. Left: Brand Container (Anchored at top-left, 250px wide to match Sidebar below)
 $BrandPanel = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Left"
-    Width     = 240
+    Width     = 250
     BackColor = $script:Theme.Header
 }
 $LogoIcon = New-Object System.Windows.Forms.Label -Property @{
@@ -295,23 +301,41 @@ $TitleLbl = New-Object System.Windows.Forms.Label -Property @{
     Text        = "ADMINWORKS"; Location = New-Object System.Drawing.Point(44, 12); AutoSize = $true
     ForeColor   = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 12, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false
 }
+
+$BadgePro = New-Object System.Windows.Forms.Label -Property @{
+    Text        = "v6.0"
+    Location    = New-Object System.Drawing.Point(172, 13)
+    Size        = New-Object System.Drawing.Size(38, 17)
+    BackColor   = $script:Theme.SidebarActive
+    ForeColor   = $script:Theme.AccentGlow
+    Font        = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
+    TextAlign   = "MiddleCenter"
+    UseMnemonic = $false
+}
+
 $TitleSub = New-Object System.Windows.Forms.Label -Property @{
-    Text        = "v6.0  $($UI.Bullet)  WINDOWS 11 EDITION  $($UI.Bullet)  BY KUSHAGRA KARIRA"; Location = New-Object System.Drawing.Point(44, 36); Size = New-Object System.Drawing.Size(260, 18)
-    ForeColor   = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($GlobalFont, 7.5, [System.Drawing.FontStyle]::Bold)
-    Cursor      = [System.Windows.Forms.Cursors]::Hand; UseMnemonic = $false; AutoSize = $false; TextAlign = "MiddleLeft"
+    Text        = "Windows 11  $($UI.Bullet)  By Kushagra Karira"
+    Location    = New-Object System.Drawing.Point(44, 34)
+    Size        = New-Object System.Drawing.Size(198, 18)
+    ForeColor   = $script:Theme.TextMuted
+    Font        = New-Object System.Drawing.Font($GlobalFontText, 8)
+    Cursor      = [System.Windows.Forms.Cursors]::Hand
+    UseMnemonic = $false
+    AutoSize    = $false
+    TextAlign   = "MiddleLeft"
 }
 $TitleSub.Add_Click({ Start-Process "https://github.com/KushagraKarira/AdminWorks/releases" })
 try {
     $SubTip = New-Object System.Windows.Forms.ToolTip
     $SubTip.SetToolTip($TitleSub, "Click to check updates on GitHub Releases")
 } catch {}
-$TitleSub.Add_MouseEnter({ $this.ForeColor = $script:Theme.TextMain })
-$TitleSub.Add_MouseLeave({ $this.ForeColor = $script:Theme.AccentGlow })
+$TitleSub.Add_MouseEnter({ $this.ForeColor = $script:Theme.AccentGlow })
+$TitleSub.Add_MouseLeave({ $this.ForeColor = $script:Theme.TextMuted })
 
 $UpdateBadge = New-Object System.Windows.Forms.Label -Property @{
     Text        = "UPDATE"
-    Location    = New-Object System.Drawing.Point(176, 12)
-    Size        = New-Object System.Drawing.Size(60, 18)
+    Location    = New-Object System.Drawing.Point(172, 13)
+    Size        = New-Object System.Drawing.Size(65, 17)
     BackColor   = $script:Theme.Success
     ForeColor   = [System.Drawing.Color]::White
     Font        = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
@@ -328,7 +352,7 @@ try {
     $UpTip.SetToolTip($UpdateBadge, "A new release is available! Click to update AdminWorks.")
 } catch {}
 
-$BrandPanel.Controls.AddRange(@($LogoIcon, $TitleLbl, $TitleSub, $UpdateBadge))
+$BrandPanel.Controls.AddRange(@($LogoIcon, $TitleLbl, $BadgePro, $TitleSub, $UpdateBadge))
 
 # 2. Right: Combined Container for Search & Window Controls
 $RightHeader = New-Object System.Windows.Forms.Panel -Property @{
@@ -396,6 +420,17 @@ $SearchPill = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Fill"
     BackColor = $script:Theme.Sidebar
 }
+$SearchPill.Add_Paint({
+    param($s, $e)
+    $borderColor = if ($SearchBox.Focused -or ($SearchBox.Text -ne $SearchPlaceholder -and $SearchBox.Text.Trim() -ne "")) { 
+        $script:Theme.AccentGlow 
+    } else { 
+        $script:Theme.CardBorder 
+    }
+    $pen = New-Object System.Drawing.Pen($borderColor, 1)
+    $e.Graphics.DrawRectangle($pen, 0, 0, ($s.Width - 1), ($s.Height - 1))
+    $pen.Dispose()
+})
 $SearchWrapper.Controls.Add($SearchPill)
 
 $SearchIconLbl = New-Object System.Windows.Forms.Label -Property @{
@@ -410,9 +445,11 @@ $SearchBox = New-Object System.Windows.Forms.TextBox -Property @{
 }
 $SearchBox.Add_GotFocus({ 
     if ($this.Text -eq $SearchPlaceholder) { $this.Text = ""; $this.ForeColor = $script:Theme.TextMain } 
+    $SearchPill.Invalidate()
 })
 $SearchBox.Add_LostFocus({ 
     if ([string]::IsNullOrWhiteSpace($this.Text)) { $this.Text = $SearchPlaceholder; $this.ForeColor = $script:Theme.TextSubtle } 
+    $SearchPill.Invalidate()
 })
 $SearchBox.Add_KeyDown({
     if ($_.KeyCode -eq [System.Windows.Forms.Keys]::Escape) {
@@ -646,10 +683,10 @@ $Header.SendToBack()
 $LogContainer.SendToBack()
 $BodyPanel.BringToFront()
 
-# --- [Tier 2: Sidebar Navigation (Left 240px inside BodyPanel, seamlessly below BrandPanel)] ---
+# --- [Tier 2: Sidebar Navigation (Left 250px inside BodyPanel, seamlessly below BrandPanel)] ---
 $Sidebar = New-Object System.Windows.Forms.Panel -Property @{
     Dock        = "Left"
-    Width       = 240
+    Width       = 250
     BackColor   = $script:Theme.Sidebar
     AutoScroll  = $true
 }
@@ -830,7 +867,10 @@ function Update-ResponsiveLayout {
         $activePanel.ResumeLayout($true)
 
         # Apply dark mode theme to scrollbar and strictly hide horizontal scrollbar (SB_HORZ = 0)
-        try { [void][UxThemeNative]::SetWindowTheme($activePanel.Handle, "DarkMode_Explorer", $null) } catch {}
+        try {
+            [void][NativeMethods]::AllowDarkModeForWindow($activePanel.Handle, $true)
+            [void][NativeMethods]::SetWindowTheme($activePanel.Handle, "DarkMode_Explorer", $null)
+        } catch {}
         try { [void][NativeMethods]::ShowScrollBar($activePanel.Handle, 0, $false) } catch {}
     }
 }
@@ -1209,9 +1249,22 @@ function New-TweakCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc,
         Cursor      = [System.Windows.Forms.Cursors]::Hand
         UseMnemonic = $false
     }
-    $Btn.FlatAppearance.BorderSize = 0
-    $Btn.Add_MouseEnter({ if ($this.Enabled) { $this.BackColor = $script:Theme.Accent; $this.ForeColor = [System.Drawing.Color]::White } })
-    $Btn.Add_MouseLeave({ if ($this.Enabled) { $this.BackColor = $script:Theme.SidebarActive; $this.ForeColor = $script:Theme.TextMain } })
+    $Btn.FlatAppearance.BorderSize = 1
+    $Btn.FlatAppearance.BorderColor = $script:Theme.CardBorder
+    $Btn.Add_MouseEnter({ 
+        if ($this.Enabled) { 
+            $this.BackColor = $script:Theme.Accent
+            $this.ForeColor = [System.Drawing.Color]::White
+            $this.FlatAppearance.BorderColor = $script:Theme.AccentGlow
+        } 
+    })
+    $Btn.Add_MouseLeave({ 
+        if ($this.Enabled) { 
+            $this.BackColor = $script:Theme.SidebarActive
+            $this.ForeColor = $script:Theme.TextMain
+            $this.FlatAppearance.BorderColor = $script:Theme.CardBorder
+        } 
+    })
 
     $Btn.Add_Click({
         Invoke-AdminWorksAction $this.Tag $this {
@@ -1241,10 +1294,12 @@ function Update-ToggleStateVisual ($B, $Active) {
         $B.Text = "ENABLED"
         $B.BackColor = $script:Theme.Success
         $B.ForeColor = [System.Drawing.Color]::White
+        $B.FlatAppearance.BorderColor = $script:Theme.Success
     } else {
         $B.Text = "DISABLED"
         $B.BackColor = $script:Theme.SidebarActive
         $B.ForeColor = $script:Theme.TextMuted
+        $B.FlatAppearance.BorderColor = $script:Theme.CardBorder
     }
 }
 
@@ -1263,7 +1318,8 @@ function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc
         Cursor      = [System.Windows.Forms.Cursors]::Hand
         UseMnemonic = $false
     }
-    $Btn.FlatAppearance.BorderSize = 0
+    $Btn.FlatAppearance.BorderSize = 1
+    $Btn.FlatAppearance.BorderColor = $script:Theme.CardBorder
 
     $ToggleMeta = [PSCustomObject]@{
         Button        = $Btn
@@ -1391,7 +1447,16 @@ foreach ($tab in $TabList) {
     })
     $Flow.Controls.Add($Banner)
     $Flow.SetFlowBreak($Banner, $true)
-    try { [void][UxThemeNative]::SetWindowTheme($Flow.Handle, "DarkMode_Explorer", $null) } catch {}
+    try {
+        [void][NativeMethods]::AllowDarkModeForWindow($Flow.Handle, $true)
+        [void][NativeMethods]::SetWindowTheme($Flow.Handle, "DarkMode_Explorer", $null)
+    } catch {}
+    $Flow.Add_HandleCreated({
+        try {
+            [void][NativeMethods]::AllowDarkModeForWindow($this.Handle, $true)
+            [void][NativeMethods]::SetWindowTheme($this.Handle, "DarkMode_Explorer", $null)
+        } catch {}
+    })
     Enable-DoubleBuffering $Flow
 
     # Strictly suppress horizontal scroll while preserving vertical scrolling
@@ -1417,7 +1482,7 @@ foreach ($tab in $TabList) {
     # Sidebar Item Panel
     $ItemPanel = New-Object System.Windows.Forms.Panel -Property @{
         Location  = New-Object System.Drawing.Point(0, $BtnY)
-        Size      = New-Object System.Drawing.Size(240, 40)
+        Size      = New-Object System.Drawing.Size(250, 40)
         BackColor = $script:Theme.Sidebar
         Cursor    = [System.Windows.Forms.Cursors]::Hand
         Tag       = $tab.Id
@@ -1442,7 +1507,7 @@ foreach ($tab in $TabList) {
     # Tab Text Label
     $TextLbl = New-Object System.Windows.Forms.Label -Property @{
         Text        = $tab.Name
-        Location    = New-Object System.Drawing.Point(42, 10); Size = New-Object System.Drawing.Size(155, 20)
+        Location    = New-Object System.Drawing.Point(42, 10); Size = New-Object System.Drawing.Size(162, 20)
         ForeColor   = $script:Theme.TextMuted; Font = New-Object System.Drawing.Font($GlobalFont, 8.5, [System.Drawing.FontStyle]::Bold)
         BackColor   = [System.Drawing.Color]::Transparent
         AutoEllipsis= $true
@@ -1452,7 +1517,7 @@ foreach ($tab in $TabList) {
     # Tab Badge Indicator (Live Tool Count)
     $BadgeLbl = New-Object System.Windows.Forms.Label -Property @{
         Text        = ""
-        Location    = New-Object System.Drawing.Point(198, 12); Size = New-Object System.Drawing.Size(34, 16)
+        Location    = New-Object System.Drawing.Point(208, 12); Size = New-Object System.Drawing.Size(34, 16)
         ForeColor   = $script:Theme.TextSubtle; Font = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold)
         BackColor   = [System.Drawing.Color]::Transparent
         TextAlign   = "MiddleRight"
@@ -2573,7 +2638,7 @@ function Start-UpdateCheckAsync {
                 [void][version]::TryParse($cleanTag, [ref]$vLatest)
                 [void][version]::TryParse($cleanCur, [ref]$vCur)
                 
-                if ($vLatest -gt $vCur -or ($latestTag -and $latestTag -ne "v$CurrentVer" -and $latestTag -ne $CurrentVer)) {
+                if ($vLatest -gt $vCur) {
                     return @{ Available = $true; Tag = $latestTag; Url = $latest.html_url }
                 }
             }
@@ -2599,6 +2664,7 @@ function Start-UpdateCheckAsync {
                     if ($Form -and -not $Form.IsDisposed) {
                         [void]$Form.BeginInvoke([System.Action]{
                             $badgeText = if ($newTag.Length -le 8) { $newTag } else { "UPDATE" }
+                            if ($BadgePro) { $BadgePro.Visible = $false }
                             $UpdateBadge.Text = $badgeText
                             $UpdateBadge.Visible = $true
                             if ($UpTip) { $UpTip.SetToolTip($UpdateBadge, "Update $newTag available on GitHub! Click to install.") }
@@ -2619,4 +2685,3 @@ function Start-UpdateCheckAsync {
 Write-Log "AdminWorks Pro Suite v$($script:AppVersion) loaded and ready." "Success"
 Start-UpdateCheckAsync
 [void]$Form.ShowDialog()
-
