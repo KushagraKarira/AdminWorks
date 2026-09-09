@@ -596,16 +596,19 @@ $StatRAM  = New-StatWidget $UI.Ram "MEMORY USED"
 $StatDisk = New-StatWidget $UI.Disk "SYSTEM DRIVE (C:)"
 $StatUp   = New-StatWidget $UI.Uptime "SYSTEM UPTIME"
 
-# High-Performance CPU Counter (lazily initialized on first telemetry tick)
-$script:CpuCounter = $null
-$script:CpuCounterUnavailable = $false
+# High-Performance CPU Counter (eagerly initialized at startup)
+$script:CpuCounter = try {
+    $c = New-Object System.Diagnostics.PerformanceCounter("Processor", "% Processor Time", "_Total")
+    $null = $c.NextValue()
+    $c
+} catch { $null }
 
 # --- [Card Engine & Registration Setup] ---
 $script:AllCards       = New-Object System.Collections.Generic.List[PSObject]
 $script:ToggleCards    = New-Object System.Collections.Generic.List[PSObject]
 $script:CategoryPanels = @{}
 $script:SidebarItems   = @{}
-$script:CurrentTabId   = "Presets"
+$script:CurrentTabId   = "Maint"
 
 $ViewContainer = New-Object System.Windows.Forms.Panel -Property @{
     Dock      = "Fill"
@@ -1024,7 +1027,6 @@ function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc
 
 # --- [Sidebar Tabs Navigation Definition] ---
 $TabList = @(
-    @{ Id = "Presets";   Icon = $UI.Presets;  Name = "Preset Profiles"; Desc = "1-Click Curated Optimization & Safety Profiles" },
     @{ Id = "Maint";     Icon = $UI.Maint;    Name = "Maintenance";     Desc = "DISM, SFC, WinSxS reduction, Component Repair & Event Log Cleaning" },
     @{ Id = "Perf";      Icon = $UI.Perf;     Name = "Performance";     Desc = "Power plans, Thread priority separation, RAM & Latency Tuning" },
     @{ Id = "Net";       Icon = $UI.Net;      Name = "Network & DNS";   Desc = "DNS benchmarks, Wi-Fi keys, TCP/IP stack, RDP & Port Listeners" },
@@ -1307,78 +1309,7 @@ $SearchBox.Add_TextChanged({
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# 1. 1-CLICK PRESET PROFILES
-# ------------------------------------------------------------------------------
-$P_Presets = $script:CategoryPanels["Presets"]
-
-New-TweakCard $P_Presets $UI.Sparkle "Gamer Mode Profile" "Preset Profile" "Applies Ultimate Power Plan, disables GameDVR, prioritizes foreground threads & frees RAM." {
-    Write-Log "Applying GAMER MODE PRESET..." "Warning"
-    Set-PowerSchemeUltimate
-    Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value "0" 
-    reg add "HKCU\System\GameConfigStore" /v "GameDVR_Enabled" /t REG_DWORD /d 0 /f | Out-Null
-    reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\GameDVR" /v "AllowGameDVR" /t REG_DWORD /d 0 /f | Out-Null
-    reg add "HKLM\SYSTEM\CurrentControlSet\Control\PriorityControl" /v Win32PrioritySeparation /t REG_DWORD /d 38 /f | Out-Null
-    [System.GC]::Collect()
-    Write-Log "Gamer Mode Profile successfully configured and active." "Success"
-}
-
-New-TweakCard $P_Presets $UI.Shield "Privacy Lockdown" "Preset Profile" "Disables telemetry, DiagTrack, Recall AI, Bing Start Search, Ad ID & Edge Background." {
-    Write-Log "Applying PRIVACY LOCKDOWN PRESET..." "Warning"
-    Stop-Service "DiagTrack", "dmwappushservice" -ErrorAction SilentlyContinue
-    Set-Service "DiagTrack", "dmwappushservice" -StartupType Disabled -ErrorAction SilentlyContinue
-    reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection" /v AllowTelemetry /t REG_DWORD /d 0 /f | Out-Null
-    reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Privacy" /v "TailoredExperiencesWithDiagnosticDataEnabled" /t REG_DWORD /d 0 /f | Out-Null
-    reg add "HKCU\Software\Policies\Microsoft\Windows\Explorer" /v "DisableSearchBoxSuggestions" /t REG_DWORD /d 1 /f | Out-Null
-    reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Search" /v "BingSearchEnabled" /t REG_DWORD /d 0 /f | Out-Null
-    reg add "HKLM\SOFTWARE\Policies\Microsoft\Edge" /v "BackgroundModeEnabled" /t REG_DWORD /d 0 /f | Out-Null
-    
-    $isWin11 = ([Environment]::OSVersion.Version.Build -ge 22000)
-    if ($isWin11 -and (Get-WindowsOptionalFeature -Online -FeatureName "Recall" -ErrorAction SilentlyContinue)) {
-        Disable-WindowsOptionalFeature -Online -FeatureName "Recall" -Remove -NoRestart -ErrorAction SilentlyContinue | Out-Null
-    }
-    Write-Log "Privacy Lockdown successfully enforced." "Success"
-}
-
-New-TweakCard $P_Presets $UI.Building "Clean Workstation" "Preset Profile" "Removes consumer bloat, restores classic context menu, disables SMB signing for max speed & oplocks." {
-    Write-Log "Applying CLEAN WORKSTATION PRESET..." "Warning"
-    $isWin11 = ([Environment]::OSVersion.Version.Build -ge 22000)
-    if ($isWin11) {
-        reg add "HKCU\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" /f /ve | Out-Null
-    }
-    Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -Value 0
-    Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Hidden" -Value 1
-    Set-SmbClientConfiguration -EnableSecuritySignature $false -Force -ErrorAction SilentlyContinue
-    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "EnableOplocks" -Value 0 -ErrorAction SilentlyContinue
-    Restart-Explorer
-    Write-Log "Clean Workstation configured." "Success"
-}
-
-New-TweakCard $P_Presets $UI.Refresh "Express Maintenance" "Preset Profile" "Runs SSD ReTrim, clears Temp caches, flushes standby RAM & forces Windows time resync." {
-    Write-Log "Running EXPRESS MAINTENANCE ROUTINE..." "Warning"
-    foreach ($d in @("C", "D")) { if (Test-Path "$d`:\") { Optimize-Volume -DriveLetter $d -ReTrim -Defrag -Verbose 4>&1 | Out-Null } }
-    Remove-Item "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item "$env:SystemRoot\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
-    cleanmgr /sagerun:1 | Out-Null
-    [System.GC]::Collect()
-    Start-Service w32time -ErrorAction SilentlyContinue
-    w32tm /resync /force 2>$null | Out-Null
-    Write-Log "Express Maintenance completed." "Success"
-}
-
-New-TweakCard $P_Presets $UI.Undo "Rollback Last Backup" "Safety" "Restores the most recent registry backup saved in the AdminWorks backup directory." {
-    Write-Log "Checking for available registry backups..." "Exec"
-    $latest = Get-ChildItem "$BackupDir\*.reg" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if ($latest) {
-        Write-Log "Restoring: $($latest.FullName)..." "Warning"
-        reg import $latest.FullName 2>$null | Out-Null
-        Write-Log "Registry state restored from: $($latest.Name)" "Success"
-    } else {
-        Write-Log "No existing backup files found in $BackupDir." "Warning"
-    }
-}
-
-# ------------------------------------------------------------------------------
-# 2. MAINTENANCE & REPAIR
+# 1. MAINTENANCE & REPAIR
 # ------------------------------------------------------------------------------
 $P_Maint = $script:CategoryPanels["Maint"]
 
@@ -1462,7 +1393,7 @@ New-TweakCard $P_Maint $UI.Refresh "Rebuild Windows Search Index" "Search Fix" "
 }
 
 # ------------------------------------------------------------------------------
-# 3. PERFORMANCE & GAMING
+# 2. PERFORMANCE & GAMING
 # ------------------------------------------------------------------------------
 $P_Perf = $script:CategoryPanels["Perf"]
 
@@ -1514,7 +1445,7 @@ New-TweakCard $P_Perf $UI.Hardware "Disable USB Suspend" "Hardware Latency" "Dis
 }
 
 # ------------------------------------------------------------------------------
-# 4. NETWORKING & DNS
+# 3. NETWORKING & DNS
 # ------------------------------------------------------------------------------
 $P_Net = $script:CategoryPanels["Net"]
 
@@ -1624,7 +1555,7 @@ New-ToggleCard $P_Net $UI.Shield "Remote Desktop (RDP)" "Remote Admin" "Toggles 
     }
 
 # ------------------------------------------------------------------------------
-# 5. PRIVACY, SECURITY & DEBLOAT
+# 4. PRIVACY, SECURITY & DEBLOAT
 # ------------------------------------------------------------------------------
 $P_Privacy = $script:CategoryPanels["Privacy"]
 
@@ -1735,7 +1666,7 @@ New-ToggleCard $P_Privacy $UI.Admin "Activity History & Timeline" "Privacy" "Tog
     }
 
 # ------------------------------------------------------------------------------
-# 6. SHELL & CONTEXT MENU
+# 5. SHELL & CONTEXT MENU
 # ------------------------------------------------------------------------------
 $P_Context = $script:CategoryPanels["Context"]
 
@@ -1824,7 +1755,7 @@ New-ToggleCard $P_Context $UI.Context "Explorer Compact View" "Windows 11 UI" "T
     }
 
 # ------------------------------------------------------------------------------
-# 7. HARDWARE & STORAGE AUDIT
+# 6. HARDWARE & STORAGE AUDIT
 # ------------------------------------------------------------------------------
 $P_Hw = $script:CategoryPanels["Hardware"]
 
@@ -1886,7 +1817,7 @@ New-TweakCard $P_Hw $UI.Disk "Disk Sector & Partition Audit" "Drive Specs" "Audi
 }
 
 # ------------------------------------------------------------------------------
-# 8. SOFTWARE & WINGET HUB
+# 7. SOFTWARE & WINGET HUB
 # ------------------------------------------------------------------------------
 $P_Apps = $script:CategoryPanels["Apps"]
 
@@ -1993,7 +1924,7 @@ New-TweakCard $P_Apps $UI.Shield "Install SysAdmin Bundle" "Winget Bundle" "Inst
 }
 
 # ------------------------------------------------------------------------------
-# 9. ADMIN UTILITIES
+# 8. ADMIN UTILITIES
 # ------------------------------------------------------------------------------
 $P_Admin = $script:CategoryPanels["Admin"]
 
@@ -2083,10 +2014,29 @@ New-TweakCard $P_Admin $UI.Shield "Defender Quick Scan" "Antivirus" "Updates thr
     Write-Log "Microsoft Defender Quick Scan complete." "Success"
 }
 
-# --- [Default Tab Activation] ---
+# --- [Eager Initialization & Default Tab Activation] ---
+# Eagerly initialize all toggle cards with actual system state
+foreach ($toggle in $script:ToggleCards) {
+    if ($toggle.CheckAction) {
+        try {
+            $isActive = [bool](& $toggle.CheckAction)
+            Update-ToggleStateVisual $toggle.Button $isActive
+        } catch {}
+    }
+}
+
+# Eagerly populate live tool count badges in sidebar
+foreach ($k in $script:CategoryPanels.Keys) {
+    $c = ($script:CategoryPanels[$k].Controls | Where-Object { $_ -is [System.Windows.Forms.Panel] -and $_.Tag -ne "Banner" }).Count
+    if ($script:SidebarItems[$k] -and $script:SidebarItems[$k].Badge) {
+        $script:SidebarItems[$k].Badge.Text = "$c"
+    }
+}
+
 $Form.ResumeLayout($false)
 
-Select-Tab "Presets"
+Select-Tab "Maint"
+Update-ResponsiveLayout
 
 # Global Keyboard Shortcuts
 $Form.Add_KeyDown({
@@ -2136,15 +2086,6 @@ $Form.Add_KeyDown({
 $TelemetryTimer = New-Object System.Windows.Forms.Timer -Property @{Interval = 2000; Enabled = $true}
 $TelemetryTimer.Add_Tick({
     try {
-        if (-not $script:CpuCounter -and -not $script:CpuCounterUnavailable) {
-            try {
-                $script:CpuCounter = New-Object System.Diagnostics.PerformanceCounter("Processor", "% Processor Time", "_Total")
-                $null = $script:CpuCounter.NextValue()
-            } catch {
-                $script:CpuCounterUnavailable = $true
-            }
-        }
-        
         if ($script:CpuCounter) {
             $cpuVal = [math]::Round($script:CpuCounter.NextValue(), 0)
             $StatCPU.Text = "$cpuVal% Utilization"
@@ -2193,30 +2134,7 @@ $Form.Add_FormClosing({
     if ($script:CpuCounter) { $script:CpuCounter.Dispose() }
 })
 
-# Asynchronous post-launch initialization (runs after window is visible on screen)
-$Form.Add_Shown({
-    $Form.Update()
-    
-    # Populate live tool count badges in sidebar
-    foreach ($k in $script:CategoryPanels.Keys) {
-        $c = ($script:CategoryPanels[$k].Controls | Where-Object { $_ -is [System.Windows.Forms.Panel] -and $_.Tag -ne "Banner" }).Count
-        if ($script:SidebarItems[$k] -and $script:SidebarItems[$k].Badge) {
-            $script:SidebarItems[$k].Badge.Text = "$c"
-        }
-    }
-    
-    # Initialize toggle cards with their real current system state
-    foreach ($toggle in $script:ToggleCards) {
-        if ($toggle.CheckAction) {
-            try {
-                $isActive = [bool](& $toggle.CheckAction)
-                Update-ToggleStateVisual $toggle.Button $isActive
-            } catch {}
-        }
-    }
-    
-    Update-ResponsiveLayout
-})
+
 
 Write-Log "AdminWorks Pro Suite v$($script:AppVersion) loaded and ready." "Success"
 [void]$Form.ShowDialog()
