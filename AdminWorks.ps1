@@ -1,6 +1,7 @@
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     $scriptPath = if ($PSCommandPath) { $PSCommandPath } else { $MyInvocation.MyCommand.Definition }
-    Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-NoProfile", "-ExecutionPolicy Bypass", "-File `"$scriptPath`"" -Verb RunAs
+    $psHost = if ($PSVersionTable.PSEdition -eq "Core") { "pwsh.exe" } else { "powershell.exe" }
+    Start-Process $psHost -WindowStyle Hidden -ArgumentList "-NoProfile", "-ExecutionPolicy Bypass", "-File `"$scriptPath`"" -Verb RunAs
     exit
 }
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
@@ -39,12 +40,31 @@ public class NativeMethods {
 public class AdminWorksForm : Form {
     public Control MaximizeButton { get; set; }
     protected override void WndProc(ref Message m) {
-        if (m.Msg == 0x0084 && MaximizeButton != null && !MaximizeButton.IsDisposed) {
+        if (m.Msg == 0x0084) {
             int x = (short)(m.LParam.ToInt32() & 0xFFFF);
             int y = (short)((m.LParam.ToInt32() >> 16) & 0xFFFF);
-            if (MaximizeButton.ClientRectangle.Contains(MaximizeButton.PointToClient(new Point(x, y)))) {
-                m.Result = (IntPtr)9;
-                return;
+            Point pt = this.PointToClient(new Point(x, y));
+            if (MaximizeButton != null && !MaximizeButton.IsDisposed) {
+                if (MaximizeButton.ClientRectangle.Contains(MaximizeButton.PointToClient(new Point(x, y)))) {
+                    m.Result = (IntPtr)9;
+                    return;
+                }
+            }
+            if (this.WindowState == FormWindowState.Normal) {
+                int b = 6;
+                bool left = pt.X <= b;
+                bool right = pt.X >= this.ClientSize.Width - b;
+                bool top = pt.Y <= b;
+                bool bottom = pt.Y >= this.ClientSize.Height - b;
+
+                if (top && left) { m.Result = (IntPtr)13; return; }
+                if (top && right) { m.Result = (IntPtr)14; return; }
+                if (bottom && left) { m.Result = (IntPtr)16; return; }
+                if (bottom && right) { m.Result = (IntPtr)17; return; }
+                if (left) { m.Result = (IntPtr)10; return; }
+                if (right) { m.Result = (IntPtr)11; return; }
+                if (top) { m.Result = (IntPtr)12; return; }
+                if (bottom) { m.Result = (IntPtr)15; return; }
             }
         }
         if (m.Msg == 0x00A1 && m.WParam.ToInt32() == 9) return;
@@ -109,7 +129,7 @@ $InitialHeight = [math]::Max(680,  [math]::Min(1400, [int]($ScreenBounds.Height 
 $Form = New-Object AdminWorksForm -Property @{
     Text = "ADMINWORKS PRO - WINDOWS 11"; Size = New-Object System.Drawing.Size($InitialWidth, $InitialHeight)
     BackColor = $script:Theme.Bg; StartPosition = "CenterScreen"; FormBorderStyle = "None"
-    MinimumSize = New-Object System.Drawing.Size(920, 620); KeyPreview = $true
+    MinimumSize = New-Object System.Drawing.Size(920, 620); KeyPreview = $true; Padding = New-Object System.Windows.Forms.Padding(2)
 }
 $Form.SuspendLayout()
 Enable-DoubleBuffering $Form
@@ -158,6 +178,7 @@ $TitleSub = New-Object System.Windows.Forms.Label -Property @{
 $TitleSub.Add_Click({ Start-Process "https://github.com/KushagraKarira/AdminWorks/releases" })
 $TitleSub.Add_MouseEnter({ $this.ForeColor = $script:Theme.AccentGlow })
 $TitleSub.Add_MouseLeave({ $this.ForeColor = $script:Theme.TextMuted })
+$UpTip = New-Object System.Windows.Forms.ToolTip
 $UpdateBadge = New-Object System.Windows.Forms.Label -Property @{
     Text = "UPDATE"; Location = New-Object System.Drawing.Point(168, 14); Size = New-Object System.Drawing.Size(68, 17)
     BackColor = [System.Drawing.Color]::FromArgb(16, 45, 32); ForeColor = $script:Theme.Success
@@ -384,6 +405,7 @@ function Invoke-AdminWorksAction ($ActionCode, $Button = $null, [scriptblock]$On
     if ($LogContainer.Height -le 40) { $LogContainer.Height = 180; $BtnToggleDrawer.Text = "COLLAPSE" }
     $PS = [powershell]::Create().AddScript({
         param($CodeStr, $LogBox, $Theme)
+        Add-Type -AssemblyName System.Windows.Forms, System.Drawing -ErrorAction SilentlyContinue
         function Write-Log ($Msg, $Type = "Info") {
             if ([string]::IsNullOrWhiteSpace($Msg) -or -not $LogBox -or $LogBox.IsDisposed) { return }
             try {
@@ -522,20 +544,13 @@ function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc
     $script:ToggleCards.Add($ToggleMeta)
 }
 function New-RegToggle ($Panel, $Icon, $Title, $Tag, $Desc, $Path, $Name, $OnVal = 1, $OffVal = 0, $RestartExp = $false) {
-    New-ToggleCard $Panel $Icon $Title $Tag $Desc `
-        { (Get-ItemProperty $Path -ErrorAction SilentlyContinue).$Name -eq $OnVal } `
-        {
-            $p = "$Path" -replace '^HKCU:\\?', 'HKCU\' -replace '^HKLM:\\?', 'HKLM\'
-            reg add "$p" /v "$Name" /t REG_DWORD /d $OnVal /f | Out-Null
-            if ($RestartExp) { Restart-Explorer }
-            Write-Log "$Title enabled." "Success"
-        } `
-        {
-            $p = "$Path" -replace '^HKCU:\\?', 'HKCU\' -replace '^HKLM:\\?', 'HKLM\'
-            reg add "$p" /v "$Name" /t REG_DWORD /d $OffVal /f | Out-Null
-            if ($RestartExp) { Restart-Explorer }
-            Write-Log "$Title disabled." "Warning"
-        }
+    $p = "$Path" -replace '^HKCU:\\?', 'HKCU\' -replace '^HKLM:\\?', 'HKLM\'
+    $restartCode = if ($RestartExp) { "Restart-Explorer;" } else { "" }
+    $enableCode = "reg add `"$p`" /v `"$Name`" /t REG_DWORD /d $OnVal /f | Out-Null; $restartCode Write-Log `"$Title enabled.`" `"Success`""
+    $disableCode = "reg add `"$p`" /v `"$Name`" /t REG_DWORD /d $OffVal /f | Out-Null; $restartCode Write-Log `"$Title disabled.`" `"Warning`""
+    $checkAction = { (Get-ItemProperty $Path -ErrorAction SilentlyContinue).$Name -eq $OnVal }.GetNewClosure()
+
+    New-ToggleCard $Panel $Icon $Title $Tag $Desc $checkAction $enableCode $disableCode
 }
 function Update-AdminWorksSuite ($TriggerButton = $null) {
     Write-Log "Navigating to AdminWorks GitHub Releases..." "Exec"
@@ -724,6 +739,16 @@ New-TweakCard $P_Maint $UI.Maint "Reset Print Spooler" "Printer Fix" "Clears stu
     Write-Log "Print Spooler reset and queue cleared." "Success"
 }
 New-TweakCard $P_Maint $UI.Admin "Purge Windows Event Logs" "Log Cleaner" "Clears all Application, System, Security, and Setup event logs to free space." {
+    $confirm = [System.Windows.Forms.MessageBox]::Show(
+        "Are you sure you want to clear all Windows Event Logs (Application, System, Security, etc.)? This action is irreversible.",
+        "Confirm Event Log Purge",
+        [System.Windows.Forms.MessageBoxButtons]::YesNo,
+        [System.Windows.Forms.MessageBoxIcon]::Warning
+    )
+    if ($confirm -ne [System.Windows.Forms.DialogResult]::Yes) {
+        Write-Log "Event Log purge cancelled by user." "Info"
+        return
+    }
     Write-Log "Purging all Windows Event Logs..." "Exec"
     Get-WinEvent -ListLog * -Force -ErrorAction SilentlyContinue | Where-Object { $_.RecordCount -gt 0 } | ForEach-Object {
         try { [System.Diagnostics.Eventing.Reader.EventLogSession]::GlobalSession.ClearLog($_.LogName); Write-Log "Cleared: $($_.LogName)" "Info" } catch {}
@@ -748,10 +773,12 @@ New-TweakCard $P_Perf $UI.Perf "Ultimate Power Plan" "Power Scheme" "Unlocks and
     Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value "0" 
     Write-Log "Ultimate Performance power plan applied." "Success"
 }
-New-TweakCard $P_Perf $UI.Sparkle "Visual Responsiveness" "UI Boost" "Disables window animations, fading effects, and acrylic transparency for max FPS." {
-    reg add "HKCU\Control Panel\Desktop" /v UserPreferencesMask /t REG_BINARY /d 9012038010000000 /f | Out-Null
+New-TweakCard $P_Perf $UI.Sparkle "Visual Responsiveness" "UI Boost" "Disables window animations, fading effects, and acrylic transparency for max FPS without clobbering font smoothing." {
+    reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" /v VisualFXSetting /t REG_DWORD /d 2 /f | Out-Null
+    reg add "HKCU\Control Panel\Desktop\WindowMetrics" /v MinAnimate /t REG_SZ /d 0 /f | Out-Null
+    reg add "HKCU\Control Panel\Desktop" /v MenuShowDelay /t REG_SZ /d 0 /f | Out-Null
     reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" /v EnableTransparency /t REG_DWORD /d 0 /f | Out-Null
-    Write-Log "Visual latency minimized." "Success"
+    Write-Log "Visual latency minimized and UI animations disabled." "Success"
 }
 New-TweakCard $P_Perf $UI.Cpu "Foreground CPU Boost" "Thread Priority" "Configures Win32PrioritySeparation to prioritize foreground applications." {
     reg add "HKLM\SYSTEM\CurrentControlSet\Control\PriorityControl" /v Win32PrioritySeparation /t REG_DWORD /d 38 /f | Out-Null
@@ -795,12 +822,14 @@ New-TweakCard $P_Net $UI.Net "Reset Network Stack" "Network Repair" "Performs fu
     @{ Name="Google DNS (8.8.8.8)";     IP1="8.8.8.8"; IP2="8.8.4.4"; Desc="Sets primary and secondary DNS on all active network adapters to Google Public DNS." }
 ) | ForEach-Object {
     $dns = $_
-    New-TweakCard $P_Net $UI.Net $dns.Name "DNS Switcher" $dns.Desc {
-        Get-NetAdapter | Where-Object { $_.Status -eq "Up" } | ForEach-Object {
-            Set-DnsClientServerAddress -InterfaceAlias $_.Name -ServerAddresses ($dns.IP1, $dns.IP2)
-            Write-Log "Set $($dns.Name) on adapter: $($_.Name)" "Success"
-        }
-    }
+    $ip1 = $dns.IP1; $ip2 = $dns.IP2; $dName = $dns.Name
+    $dnsCode = @"
+Get-NetAdapter | Where-Object { `$_.Status -eq 'Up' } | ForEach-Object {
+    Set-DnsClientServerAddress -InterfaceAlias `$_.Name -ServerAddresses ('$ip1', '$ip2')
+    Write-Log "Set $dName on adapter: `$(`$_.Name)" "Success"
+}
+"@
+    New-TweakCard $P_Net $UI.Net $dns.Name "DNS Switcher" $dns.Desc $dnsCode
 }
 New-TweakCard $P_Net $UI.Refresh "Restore Automatic DNS" "DNS Reset" "Reverts all active network interfaces to obtain DNS dynamically via DHCP." {
     Get-NetAdapter | Where-Object { $_.Status -eq "Up" } | ForEach-Object {
@@ -872,6 +901,16 @@ New-ToggleCard $P_Net $UI.Shield "Remote Desktop (RDP)" "Remote Admin" "Toggles 
     }
 $P_Privacy = $script:CategoryPanels["Privacy"]
 New-TweakCard $P_Privacy $UI.Apps "Universal OEM Debloat" "App Purge" "Removes consumer bloatware (TikTok, CandyCrush, McAfee, Netflix, DevHome, etc.)." {
+    $confirm = [System.Windows.Forms.MessageBox]::Show(
+        "Are you sure you want to remove pre-installed third-party consumer packages?`n`nPackages targeted include Spotify, Netflix, TikTok, McAfee, DevHome, etc.",
+        "Confirm Universal Debloat",
+        [System.Windows.Forms.MessageBoxButtons]::YesNo,
+        [System.Windows.Forms.MessageBoxIcon]::Warning
+    )
+    if ($confirm -ne [System.Windows.Forms.DialogResult]::Yes) {
+        Write-Log "Universal Debloat cancelled by user." "Info"
+        return
+    }
     $Apps = @(
         "*TikTok*", "*Instagram*", "*Facebook*", "*LinkedIn*", "*Twitter*", "*WhatsApp*",
         "*Disney*", "*PrimeVideo*", "*Spotify*", "*Netflix*", "*Hulu*", "*CandyCrush*",
@@ -937,7 +976,7 @@ New-ToggleCard $P_Privacy $UI.Shield "Kill Telemetry & DiagTrack" "Privacy" "Tog
         reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Privacy" /v "TailoredExperiencesWithDiagnosticDataEnabled" /t REG_DWORD /d 1 /f | Out-Null
         Write-Log "Telemetry services restored." "Warning"
     }
-New-TweakCard $P_Privacy $UI.Shield "Block Telemetry in Hosts" "Security" "Appends known telemetry, diagnostic, and ad endpoints to hosts file." {
+New-TweakCard $P_Privacy $UI.Shield "Block Telemetry in Hosts" "Security" "Appends known telemetry, diagnostic, and ad endpoints to hosts file (with backup)." {
     $hosts = "$env:SystemRoot\System32\drivers\etc\hosts"; Copy-Item $hosts "$hosts.bak" -Force
     $domains = @("telemetry.microsoft.com", "v10.events.data.microsoft.com", "browser.events.data.msn.com", "watson.telemetry.microsoft.com")
     foreach ($d in $domains) {
@@ -946,7 +985,7 @@ New-TweakCard $P_Privacy $UI.Shield "Block Telemetry in Hosts" "Security" "Appen
             Write-Log "Blocked host: $d" "Success"
         }
     }
-    Write-Log "Hosts file telemetry filter updated." "Success"
+    Write-Log "Hosts file telemetry filter updated (Backup saved as hosts.bak). Note: Windows DNS cache may bypass hosts for core OS telemetry." "Success"
 }
 New-RegToggle $P_Privacy $UI.Privacy "Lock Screen Spotlight & Ads" "UI Cleanup" "Toggles dynamic promotional suggestions, lockscreen tips, and feedback notifications." `
     "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" "SubscribedContent-338388Enabled" 0 1
@@ -1114,9 +1153,9 @@ New-TweakCard $P_Apps $UI.Apps "Backup Installed Apps List" "Package Manager" "E
     @{ Id="Microsoft.SysinternalsSuite"; Name="Sysinternals Suite"; Cat="SysAdmin Tools"; Desc="Installs Microsoft Sysinternals troubleshooting suite via Winget." }
 ) | ForEach-Object {
     $app = $_
-    New-TweakCard $P_Apps $UI.Apps "Install $($app.Name)" $app.Cat $app.Desc {
-        Install-WingetPackage $app.Id $app.Name $app.Src
-    }
+    $appId = $app.Id; $appName = $app.Name; $appSrc = if ($app.Src) { "'$($app.Src)'" } else { "`$null" }
+    $appCode = "Install-WingetPackage '$appId' '$appName' $appSrc"
+    New-TweakCard $P_Apps $UI.Apps "Install $($app.Name)" $app.Cat $app.Desc $appCode
 }
 New-TweakCard $P_Apps $UI.Admin "Install Developer Bundle" "Winget Bundle" "Installs Git, VS Code, Windows Terminal, and PowerShell 7 in one batch." {
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing." "Error"; return }
@@ -1185,9 +1224,9 @@ New-TweakCard $P_Admin $UI.Shield "Windows License Audit" "License Status" "Chec
     @{ Cmd="wf.msc";      Name="Launch Advanced Firewall";     Desc="Opens wf.msc to configure inbound and outbound network filtering rules."; Icon=$UI.Shield }
 ) | ForEach-Object {
     $q = $_
-    New-TweakCard $P_Admin $q.Icon $q.Name "Quick Launcher" $q.Desc {
-        Start-Process $q.Cmd; Write-Log "$($q.Name) opened." "Success"
-    }
+    $cmd = $q.Cmd; $name = $q.Name
+    $qlCode = "Start-Process '$cmd'; Write-Log '$name opened.' 'Success'"
+    New-TweakCard $P_Admin $q.Icon $q.Name "Quick Launcher" $q.Desc $qlCode
 }
 New-TweakCard $P_Admin $UI.Shield "Defender Quick Scan" "Antivirus" "Updates threat intelligence signatures and launches a Windows Defender scan." {
     Update-MpSignature | Out-Null; Start-MpScan -ScanType QuickScan | Out-Null
@@ -1268,10 +1307,9 @@ function Start-UpdateCheckAsync {
         param($CurrentVer, $Repo)
         try {
             [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls13
-            $headers = @{ "User-Agent" = "AdminWorks-AutoUpdater" }
-            $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases" -Headers $headers -TimeoutSec 5 -ErrorAction Stop
-            if ($releases -and $releases.Count -gt 0) {
-                $latest = $releases[0]
+                        $headers = @{ "User-Agent" = "AdminWorks-AutoUpdater" }
+            $latest = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -Headers $headers -TimeoutSec 5 -ErrorAction Stop
+            if ($latest -and $latest.tag_name) {
                 $latestTag = [string]$latest.tag_name
                 $cleanTagNum = ($latestTag -replace '^[^\d]*', '') -replace '[^\d\.]', ''
                 $cleanCurNum = ($CurrentVer -replace '^[^\d]*', '') -replace '[^\d\.]', ''
@@ -1320,3 +1358,4 @@ function Start-UpdateCheckAsync {
 Write-Log "AdminWorks Pro Suite v$($script:AppVersion) loaded and ready." "Success"
 Start-UpdateCheckAsync
 [void]$Form.ShowDialog()
+
