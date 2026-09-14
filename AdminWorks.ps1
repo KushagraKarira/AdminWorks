@@ -36,6 +36,20 @@ public class NativeMethods {
     [DllImport("user32.dll")] public static extern void ShowScrollBar(IntPtr h, int b, bool s);
     [StructLayout(LayoutKind.Sequential)]
     public struct MARGINS { public int cxLeftWidth, cxRightWidth, cyTopHeight, cyBottomHeight; }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MEMORYSTATUSEX {
+        public uint dwLength;
+        public uint dwMemoryLoad;
+        public ulong ullTotalPhys;
+        public ulong ullAvailPhys;
+        public ulong ullTotalPageFile;
+        public ulong ullAvailPageFile;
+        public ulong ullTotalVirtual;
+        public ulong ullAvailVirtual;
+        public ulong ullAvailExtendedVirtual;
+    }
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
 }
 public class AdminWorksForm : Form {
     public Control MaximizeButton { get; set; }
@@ -88,6 +102,9 @@ try { [NativeMethods]::SetPreferredAppMode(2) | Out-Null } catch {}
 function Enable-DoubleBuffering($ctrl) {
     if (-not $ctrl) { return }
     try { $ctrl.GetType().GetProperty("DoubleBuffered", [System.Reflection.BindingFlags]"Instance, NonPublic").SetValue($ctrl, $true, $null) } catch {}
+}
+if (-not (Get-PSDrive -Name HKCR -ErrorAction SilentlyContinue)) {
+    New-PSDrive -Name HKCR -PSProvider Registry -Root HKEY_CLASSES_ROOT -ErrorAction SilentlyContinue | Out-Null
 }
 $script:Theme = @{
     Bg            = [System.Drawing.Color]::FromArgb(15, 17, 23)
@@ -398,7 +415,23 @@ function Update-ResponsiveLayout {
     }
 }
 $ViewContainer.Add_SizeChanged({ Update-ResponsiveLayout })
+$script:IsExecuting = $false
+$script:CurrentRunningTask = "Ready"
+
 function Invoke-AdminWorksAction ($ActionCode, $Button = $null, [scriptblock]$OnComplete = $null) {
+    if ($script:IsExecuting) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Another servicing or optimization task is currently running ($script:CurrentRunningTask).`nPlease wait for it to complete.",
+            "Operation in Progress",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Information
+        ) | Out-Null
+        return
+    }
+    $taskTitle = if ($Button -and $Button.Parent -and $Button.Parent.Controls[2]) { $Button.Parent.Controls[2].Text } else { "System Task" }
+    $script:IsExecuting = $true
+    $script:CurrentRunningTask = $taskTitle
+
     if ($Button -and -not $Button.IsDisposed) {
         $Button.Enabled = $false; $Button.Text = "RUNNING..."; $Button.BackColor = $script:Theme.Warning; $Button.ForeColor = [System.Drawing.Color]::Black
     }
@@ -406,6 +439,9 @@ function Invoke-AdminWorksAction ($ActionCode, $Button = $null, [scriptblock]$On
     $PS = [powershell]::Create().AddScript({
         param($CodeStr, $LogBox, $Theme)
         Add-Type -AssemblyName System.Windows.Forms, System.Drawing -ErrorAction SilentlyContinue
+        if (-not (Get-PSDrive -Name HKCR -ErrorAction SilentlyContinue)) {
+            New-PSDrive -Name HKCR -PSProvider Registry -Root HKEY_CLASSES_ROOT -ErrorAction SilentlyContinue | Out-Null
+        }
         function Write-Log ($Msg, $Type = "Info") {
             if ([string]::IsNullOrWhiteSpace($Msg) -or -not $LogBox -or $LogBox.IsDisposed) { return }
             try {
@@ -424,6 +460,16 @@ function Invoke-AdminWorksAction ($ActionCode, $Button = $null, [scriptblock]$On
             Start-Sleep -Milliseconds 600
             if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe }
         }
+        function Get-UserDesktopPath {
+            $desk = [Environment]::GetFolderPath("Desktop")
+            if (-not (Test-Path $desk)) { $desk = if ($env:USERPROFILE) { "$env:USERPROFILE\Desktop" } else { $env:TEMP } }
+            return $desk
+        }
+        function Update-AdminWorksSuite {
+            Write-Log "Navigating to AdminWorks GitHub Releases..." "Exec"
+            Start-Process "https://github.com/KushagraKarira/AdminWorks/releases"
+            Write-Log "GitHub Releases opened in browser." "Success"
+        }
         function Set-PowerSchemeUltimate {
             $planOut = powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null
             if ($planOut -match '([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})') { powercfg /setactive $matches[1] | Out-Null }
@@ -432,7 +478,7 @@ function Invoke-AdminWorksAction ($ActionCode, $Button = $null, [scriptblock]$On
         function Install-WingetPackage ($PackageId, $Name, $Source = $null) {
             if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Log "Winget is missing. Run 'Install / Repair Winget' first." "Error"; return }
             Write-Log "Installing $Name via Winget..." "Exec"
-            $cmdArgs = @("install", $PackageId, "--silent", "--accept-package-agreements", "--accept-source-agreements")
+            $cmdArgs = @("install", $PackageId, "--silent", "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity")
             if ($Source) { $cmdArgs += @("--source", $Source) }
             winget @cmdArgs | Out-Null
             Write-Log "$Name installation completed." "Success"
@@ -452,6 +498,8 @@ function Invoke-AdminWorksAction ($ActionCode, $Button = $null, [scriptblock]$On
     $Timer.Add_Tick({
         $State = $this.Tag
         if ($State.PS.InvocationStateInfo.State -ne "Running") {
+            $script:IsExecuting = $false
+            $script:CurrentRunningTask = "Ready"
             if ($State.Button -and -not $State.Button.IsDisposed) {
                 $State.Button.Enabled = $true
                 if ($State.OnComplete) { & $State.OnComplete $State.Button }
@@ -724,8 +772,16 @@ New-TweakCard $P_Maint $UI.Context "Rebuild Icon & Font Cache" "Explorer Repair"
 }
 New-TweakCard $P_Maint $UI.Disk "Clear Delivery Optimization" "Disk Reclaim" "Purges residual Windows Update peer-to-peer delivery caches to free gigabytes." {
     Write-Log "Purging Delivery Optimization cache..." "Exec"
-    Delete-DeliveryOptimizationCache -Force -ErrorAction SilentlyContinue
-    Write-Log "Delivery Optimization cache purged." "Success"
+    try {
+        if (Get-Command Delete-DeliveryOptimizationCache -ErrorAction SilentlyContinue) {
+            Delete-DeliveryOptimizationCache -Force -ErrorAction SilentlyContinue
+        } else {
+            Stop-Service dosvc -Force -ErrorAction SilentlyContinue
+            Remove-Item "$env:SystemRoot\ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization\Cache\*" -Recurse -Force -ErrorAction SilentlyContinue
+            Start-Service dosvc -ErrorAction SilentlyContinue
+        }
+        Write-Log "Delivery Optimization cache purged." "Success"
+    } catch { Write-Log "Could not clear Delivery Optimization cache: $($_.Exception.Message)" "Warning" }
 }
 New-TweakCard $P_Maint $UI.Admin "Repair WMI Repository" "WMI Fix" "Verifies and repairs corrupt Windows Management Instrumentation (WMI) repositories." {
     winmgmt /verifyrepository | ForEach-Object { Write-Log $_ "Info" }
@@ -786,14 +842,25 @@ New-TweakCard $P_Perf $UI.Cpu "Foreground CPU Boost" "Thread Priority" "Configur
 }
 New-RegToggle $P_Perf $UI.Sparkle "Kill GameDVR & Capture" "Gaming Latency" "Disables Xbox GameDVR background screen recording to eliminate micro-stuttering." `
     "HKCU:\System\GameConfigStore" "GameDVR_Enabled" 0 1
+New-ToggleCard $P_Perf $UI.Disk "Compact OS Compression" "Storage & Power" "Toggles Windows 11 Compact OS system binary compression to save 4-8 GB SSD storage with near-zero latency impact." `
+    { ((compact /compactos:query 2>$null) -match "is in the compact state") } `
+    {
+        compact /compactos:always 2>&1 | ForEach-Object { Write-Log $_ "Info" }
+        Write-Log "Compact OS compression enabled." "Success"
+    } `
+    {
+        compact /compactos:never 2>&1 | ForEach-Object { Write-Log $_ "Info" }
+        Write-Log "Compact OS compression disabled." "Warning"
+    }
 New-ToggleCard $P_Perf $UI.Disk "Disable Hibernation" "Storage & Power" "Runs 'powercfg -h off' to eliminate hiberfil.sys and free gigabytes of drive space." `
     { (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Power" -ErrorAction SilentlyContinue).HibernateEnabled -eq 0 -or -not (Test-Path "$env:SystemDrive\hiberfil.sys") } `
     { powercfg -h off; Write-Log "Hibernation disabled (hiberfil.sys removed)." "Success" } `
     { powercfg -h on; Write-Log "Hibernation enabled (hiberfil.sys restored)." "Warning" }
 New-TweakCard $P_Perf $UI.Hardware "Disable USB Suspend" "Hardware Latency" "Disables USB Selective Suspend to prevent disconnects on peripherals." {
-    powercfg /SETACVALUEINDEX SCHEME_CURRENT 2a84c312-a001-40c3-b31f-1393d254d070 48e6b7a6-50f2-4389-a784-1779c7b048db 0
-    powercfg /setactive SCHEME_CURRENT
-    Write-Log "USB Selective Suspend disabled." "Success"
+    powercfg /SETACVALUEINDEX SCHEME_CURRENT 2a84c312-a001-40c3-b31f-1393d254d070 48e6b7a6-50f2-4389-a784-1779c7b048db 0 2>$null
+    powercfg /SETDCVALUEINDEX SCHEME_CURRENT 2a84c312-a001-40c3-b31f-1393d254d070 48e6b7a6-50f2-4389-a784-1779c7b048db 0 2>$null
+    powercfg /setactive SCHEME_CURRENT 2>$null
+    Write-Log "USB Selective Suspend disabled (AC & DC)." "Success"
 }
 New-RegToggle $P_Perf $UI.Display "Auto HDR for Gaming" "DirectX Gaming" "Toggles system-wide Auto HDR for DirectX 11 and 12 games on compatible displays." `
     "HKCU:\Software\Microsoft\Direct3D" "EnableAutoHDR" 1 0
@@ -818,15 +885,20 @@ New-TweakCard $P_Net $UI.Net "Reset Network Stack" "Network Repair" "Performs fu
     Write-Log "Network stack successfully reset. (Reboot recommended)" "Success"
 }
 @(
-    @{ Name="Cloudflare DNS (1.1.1.1)"; IP1="1.1.1.1"; IP2="1.0.0.1"; Desc="Sets primary and secondary DNS on all active network adapters to Cloudflare." },
-    @{ Name="Google DNS (8.8.8.8)";     IP1="8.8.8.8"; IP2="8.8.4.4"; Desc="Sets primary and secondary DNS on all active network adapters to Google Public DNS." }
+    @{ Name="Cloudflare DNS (1.1.1.1)"; IP1="1.1.1.1"; IP2="1.0.0.1"; Doh="https://cloudflare-dns.com/dns-query"; Desc="Sets primary and secondary DNS on all active network adapters to Cloudflare with DNS-over-HTTPS." },
+    @{ Name="Google DNS (8.8.8.8)";     IP1="8.8.8.8"; IP2="8.8.4.4"; Doh="https://dns.google/dns-query";          Desc="Sets primary and secondary DNS on all active network adapters to Google Public DNS with DNS-over-HTTPS." }
 ) | ForEach-Object {
     $dns = $_
-    $ip1 = $dns.IP1; $ip2 = $dns.IP2; $dName = $dns.Name
+    $ip1 = $dns.IP1; $ip2 = $dns.IP2; $dName = $dns.Name; $doh = $dns.Doh
     $dnsCode = @"
 Get-NetAdapter | Where-Object { `$_.Status -eq 'Up' } | ForEach-Object {
     Set-DnsClientServerAddress -InterfaceAlias `$_.Name -ServerAddresses ('$ip1', '$ip2')
-    Write-Log "Set $dName on adapter: `$(`$_.Name)" "Success"
+    try {
+        if (Get-Command Set-DnsClientDohServerAddress -ErrorAction SilentlyContinue) {
+            Set-DnsClientDohServerAddress -ServerAddress '$ip1' -DohTemplate '$doh' -AllowFallbackToUdp `$false -AutoUpgrade `$true -ErrorAction SilentlyContinue
+        }
+    } catch {}
+    Write-Log "Set $dName on adapter: `$(`$_.Name) (DoH configured)" "Success"
 }
 "@
     New-TweakCard $P_Net $UI.Net $dns.Name "DNS Switcher" $dns.Desc $dnsCode
@@ -891,12 +963,14 @@ New-ToggleCard $P_Net $UI.Shield "Remote Desktop (RDP)" "Remote Admin" "Toggles 
     { (Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -ErrorAction SilentlyContinue).fDenyTSConnections -eq 0 } `
     {
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
+        try { Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue } catch {}
+        try { Enable-NetFirewallRule -Name "RemoteDesktop*" -ErrorAction SilentlyContinue } catch {}
         Write-Log "Remote Desktop (RDP) enabled and firewall opened." "Success"
     } `
     {
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 1
-        Disable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
+        try { Disable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue } catch {}
+        try { Disable-NetFirewallRule -Name "RemoteDesktop*" -ErrorAction SilentlyContinue } catch {}
         Write-Log "Remote Desktop (RDP) disabled." "Warning"
     }
 $P_Privacy = $script:CategoryPanels["Privacy"]
@@ -941,6 +1015,7 @@ New-ToggleCard $P_Privacy $UI.Search "Disable Copilot & Web Search" "Search & AI
         reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v "TaskbarDa" /t REG_DWORD /d 0 /f | Out-Null
         reg add "HKCU\Software\Policies\Microsoft\Windows\Explorer" /v "DisableSearchBoxSuggestions" /t REG_DWORD /d 1 /f | Out-Null
         reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\SearchSettings" /v "IsDynamicSearchBoxEnabled" /t REG_DWORD /d 0 /f | Out-Null
+        Restart-Explorer
         Write-Log "Windows Copilot, Widgets, and Start Web Search disabled." "Success"
     } `
     {
@@ -948,6 +1023,7 @@ New-ToggleCard $P_Privacy $UI.Search "Disable Copilot & Web Search" "Search & AI
         reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v "TaskbarDa" /t REG_DWORD /d 1 /f | Out-Null
         reg delete "HKCU\Software\Policies\Microsoft\Windows\Explorer" /v "DisableSearchBoxSuggestions" /f 2>$null | Out-Null
         reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\SearchSettings" /v "IsDynamicSearchBoxEnabled" /t REG_DWORD /d 1 /f | Out-Null
+        Restart-Explorer
         Write-Log "Windows Copilot and Search Suggestions restored." "Warning"
     }
 New-TweakCard $P_Privacy $UI.Privacy "Disable Recall & AI Tracking" "Privacy" "Disables Windows 11 Recall AI screen recording, snapshots, and background image analysis." {
@@ -1221,12 +1297,60 @@ New-TweakCard $P_Admin $UI.Shield "Windows License Audit" "License Status" "Chec
     @{ Cmd="services.msc";Name="Launch Services Console";      Desc="Opens services.msc to inspect and configure background services."; Icon=$UI.Admin },
     @{ Cmd="eventvwr.msc";Name="Launch Event Viewer";          Desc="Opens eventvwr.msc to review system diagnostics and crash logs."; Icon=$UI.Admin },
     @{ Cmd="taskschd.msc";Name="Launch Task Scheduler";        Desc="Opens taskschd.msc to inspect automated Windows tasks."; Icon=$UI.Admin },
-    @{ Cmd="wf.msc";      Name="Launch Advanced Firewall";     Desc="Opens wf.msc to configure inbound and outbound network filtering rules."; Icon=$UI.Shield }
+    @{ Cmd="wf.msc";      Name="Launch Advanced Firewall";     Desc="Opens wf.msc to configure inbound and outbound network filtering rules."; Icon=$UI.Shield },
+    @{ Cmd="ms-settings:windowsupdate"; Name="Windows Update Settings"; Desc="Opens modern Windows 11 Windows Update settings."; Icon=$UI.Refresh },
+    @{ Cmd="ms-settings:appsfeatures";  Name="Installed Apps Settings"; Desc="Opens modern Windows 11 Installed Apps & Features settings."; Icon=$UI.Apps },
+    @{ Cmd="ms-settings:network-advancedsettings"; Name="Advanced Network Settings"; Desc="Opens modern Windows 11 Advanced Network settings."; Icon=$UI.Net },
+    @{ Cmd="ms-settings:privacy";       Name="Privacy & Security Settings"; Desc="Opens modern Windows 11 Privacy & Security settings."; Icon=$UI.Privacy }
 ) | ForEach-Object {
     $q = $_
     $cmd = $q.Cmd; $name = $q.Name
     $qlCode = "Start-Process '$cmd'; Write-Log '$name opened.' 'Success'"
     New-TweakCard $P_Admin $q.Icon $q.Name "Quick Launcher" $q.Desc $qlCode
+}
+
+New-TweakCard $P_Admin $UI.Admin "Export Tweak Profile" "Profile Manager" "Exports all current toggle tweak configurations to a JSON profile on Desktop." {
+    $desk = Get-UserDesktopPath
+    $outPath = Join-Path $desk "AdminWorks_Profile_$((Get-Date).ToString('yyyyMMdd_HHmmss')).json"
+    $profileData = @{}
+    foreach ($card in $script:AllCards) {
+        $btn = $card.Panel.Controls | Where-Object { $_ -is [System.Windows.Forms.Button] -and $_.Tag -is [PSCustomObject] } | Select-Object -First 1
+        if ($btn -and $btn.Tag.CheckAction) {
+            $state = try { [bool](& $btn.Tag.CheckAction) } catch { $false }
+            $profileData[$card.Title] = $state
+        }
+    }
+    $profileData | ConvertTo-Json -Depth 2 | Out-File -FilePath $outPath -Encoding UTF8
+    Write-Log "Tweak profile successfully exported to: $outPath" "Success"
+}
+
+New-TweakCard $P_Admin $UI.Refresh "Import Tweak Profile" "Profile Manager" "Scans Desktop for AdminWorks_Profile_*.json and synchronizes toggle states." {
+    $desk = Get-UserDesktopPath
+    $files = Get-ChildItem -Path $desk -Filter "AdminWorks_Profile_*.json" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending
+    if (-not $files -or $files.Count -eq 0) {
+        Write-Log "No AdminWorks_Profile_*.json found on Desktop." "Warning"
+        return
+    }
+    $targetFile = $files[0].FullName
+    Write-Log "Importing latest profile: $($files[0].Name)..." "Exec"
+    $json = Get-Content $targetFile -Raw | ConvertFrom-Json
+    foreach ($prop in $json.PSObject.Properties) {
+        $tTitle = $prop.Name
+        $desiredActive = [bool]$prop.Value
+        foreach ($tCard in $script:ToggleCards) {
+            $cardObj = $script:AllCards | Where-Object { $_.Title -eq $tTitle } | Select-Object -First 1
+            if ($cardObj) {
+                $btn = $tCard.Button
+                $curActive = $tCard.IsActive
+                if ($curActive -ne $desiredActive) {
+                    $code = if ($desiredActive) { $tCard.EnableCode } else { $tCard.DisableCode }
+                    Invoke-AdminWorksAction $code $btn { param($b) Update-ToggleStateVisual $b $desiredActive }
+                    Write-Log "Applied profile: $tTitle -> $(if ($desiredActive) {'ENABLED'} else {'DISABLED'})" "Info"
+                }
+            }
+        }
+    }
+    Write-Log "Profile import complete." "Success"
 }
 New-TweakCard $P_Admin $UI.Shield "Defender Quick Scan" "Antivirus" "Updates threat intelligence signatures and launches a Windows Defender scan." {
     Update-MpSignature | Out-Null; Start-MpScan -ScanType QuickScan | Out-Null
@@ -1268,10 +1392,11 @@ $TelemetryTimer.Add_Tick({
                 $StatCPU.Fill.BackColor = if ($cpuClamped -gt 85) { $script:Theme.Danger } elseif ($cpuClamped -gt 60) { $script:Theme.Warning } else { $script:Theme.Accent }
             }
         }
-        $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
-        if ($os) {
-            $freeMemGB = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
-            $totMemGB  = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
+        $mem = New-Object NativeMethods+MEMORYSTATUSEX
+        $mem.dwLength = [System.Runtime.InteropServices.Marshal]::SizeOf($mem)
+        if ([NativeMethods]::GlobalMemoryStatusEx([ref]$mem)) {
+            $totMemGB  = [math]::Round([double]$mem.ullTotalPhys / 1GB, 1)
+            $freeMemGB = [math]::Round([double]$mem.ullAvailPhys / 1GB, 1)
             $usedMemGB = [math]::Round($totMemGB - $freeMemGB, 1)
             $StatRAM.Text = "$usedMemGB / $totMemGB GB"
             if ($StatRAM.Fill -and $StatRAM.Meter -and $totMemGB -gt 0) {
@@ -1292,13 +1417,24 @@ $TelemetryTimer.Add_Tick({
                 $StatDisk.Fill.BackColor = if ($diskPct -gt 90) { $script:Theme.Danger } else { $script:Theme.Success }
             }
         }
-        if ($os -and $os.LastBootUpTime) {
-            $span = (Get-Date) - $os.LastBootUpTime
-            $StatUp.Text = "$($span.Days)d $($span.Hours)h $($span.Minutes)m"
-        }
+        $uptime = [TimeSpan]::FromMilliseconds([Environment]::TickCount64)
+        $StatUp.Text = "$($uptime.Days)d $($uptime.Hours)h $($uptime.Minutes)m"
     } catch {}
 })
 $Form.Add_FormClosing({
+    param($s, $e)
+    if ($script:IsExecuting) {
+        $res = [System.Windows.Forms.MessageBox]::Show(
+            "A system task ($script:CurrentRunningTask) is currently running.`n`nClosing AdminWorks now may interrupt system changes. Exit anyway?",
+            "Task in Progress",
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        )
+        if ($res -ne [System.Windows.Forms.DialogResult]::Yes) {
+            $e.Cancel = $true
+            return
+        }
+    }
     $TelemetryTimer.Stop(); $TelemetryTimer.Dispose()
     if ($script:CpuCounter) { $script:CpuCounter.Dispose() }
 })
