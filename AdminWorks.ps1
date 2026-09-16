@@ -1,8 +1,19 @@
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    $scriptPath = if ($PSCommandPath) { $PSCommandPath } else { $MyInvocation.MyCommand.Definition }
-    $psHost = if ($PSVersionTable.PSEdition -eq "Core") { "pwsh.exe" } else { "powershell.exe" }
-    Start-Process $psHost -WindowStyle Hidden -ArgumentList "-NoProfile", "-ExecutionPolicy Bypass", "-File `"$scriptPath`"" -Verb RunAs
-    exit
+    $scriptPath = if ($PSCommandPath) { $PSCommandPath } else { $MyInvocation.MyCommand.Path }
+    if (-not $scriptPath -and $MyInvocation.MyCommand.Definition) { $scriptPath = $MyInvocation.MyCommand.Definition }
+    if ($scriptPath -and (Test-Path $scriptPath)) {
+        $psHost = if ($PSVersionTable.PSEdition -eq "Core") { "pwsh.exe" } else { "powershell.exe" }
+        Start-Process $psHost -ArgumentList "-NoProfile", "-ExecutionPolicy Bypass", "-File `"$scriptPath`"" -Verb RunAs
+        exit
+    } else {
+        [System.Windows.Forms.MessageBox]::Show(
+            "AdminWorks Pro requires Administrator privileges.`nPlease run PowerShell as Administrator and execute this script.",
+            "Administrator Rights Required",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        ) | Out-Null
+        exit
+    }
 }
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 $script:AppVersion = "6.1"
@@ -17,7 +28,7 @@ if ($script:OSBuild -lt 22000) {
     exit
 }
 
-if (-not ([System.Management.Automation.PSTypeName]'NativeMethods').Type) {
+if (-not ('NativeMethods' -as [type])) {
 Add-Type -ReferencedAssemblies System.Windows.Forms, System.Drawing -TypeDefinition @"
 using System;
 using System.Drawing;
@@ -25,7 +36,7 @@ using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using System.Runtime.InteropServices;
 
-public class NativeMethods {
+public static class NativeMethods {
     [DllImport("uxtheme.dll", EntryPoint = "#135", SetLastError = true)] public static extern int SetPreferredAppMode(int m);
     [DllImport("uxtheme.dll", EntryPoint = "#133", SetLastError = true)] public static extern bool AllowDarkModeForWindow(IntPtr h, bool a);
     [DllImport("uxtheme.dll", CharSet = CharSet.Unicode, ExactSpelling = true)] public static extern int SetWindowTheme(IntPtr h, string s, string l);
@@ -51,9 +62,7 @@ public class NativeMethods {
     [StructLayout(LayoutKind.Sequential)]
     public struct MARGINS {
         public int cxLeftWidth, cxRightWidth, cyTopHeight, cyBottomHeight;
-        public MARGINS(int l, int r, int t, int b) {
-            cxLeftWidth = l; cxRightWidth = r; cyTopHeight = t; cyBottomHeight = b;
-        }
+        public MARGINS(int l, int r, int t, int b) { cxLeftWidth = l; cxRightWidth = r; cyTopHeight = t; cyBottomHeight = b; }
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -73,16 +82,24 @@ public class NativeMethods {
     public struct MEMORYSTATUSEX {
         public uint dwLength;
         public uint dwMemoryLoad;
-        public ulong ullTotalPhys;
-        public ulong ullAvailPhys;
-        public ulong ullTotalPageFile;
-        public ulong ullAvailPageFile;
-        public ulong ullTotalVirtual;
-        public ulong ullAvailVirtual;
-        public ulong ullAvailExtendedVirtual;
+        public ulong ullTotalPhys, ullAvailPhys, ullTotalPageFile, ullAvailPageFile, ullTotalVirtual, ullAvailVirtual, ullAvailExtendedVirtual;
     }
+
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
+}
+
+public static class Win11Drawing {
+    public static GraphicsPath GetRoundPath(Rectangle r, int radius) {
+        GraphicsPath path = new GraphicsPath();
+        int d = radius * 2;
+        path.AddArc(r.X, r.Y, d, d, 180, 90);
+        path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+        path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
 }
 
 public class AdminWorksForm : Form {
@@ -118,18 +135,9 @@ public class AdminWorksForm : Form {
     }
 
     private void ResetCaptionHover() {
-        if (CloseButton != null && !CloseButton.IsDisposed) {
-            CloseButton.BackColor = Color.Transparent;
-            CloseButton.ForeColor = TextMutedColor;
-        }
-        if (MaximizeButton != null && !MaximizeButton.IsDisposed) {
-            MaximizeButton.BackColor = Color.Transparent;
-            MaximizeButton.ForeColor = TextMutedColor;
-        }
-        if (MinimizeButton != null && !MinimizeButton.IsDisposed) {
-            MinimizeButton.BackColor = Color.Transparent;
-            MinimizeButton.ForeColor = TextMutedColor;
-        }
+        if (CloseButton != null && !CloseButton.IsDisposed) { CloseButton.BackColor = Color.Transparent; CloseButton.ForeColor = TextMutedColor; }
+        if (MaximizeButton != null && !MaximizeButton.IsDisposed) { MaximizeButton.BackColor = Color.Transparent; MaximizeButton.ForeColor = TextMutedColor; }
+        if (MinimizeButton != null && !MinimizeButton.IsDisposed) { MinimizeButton.BackColor = Color.Transparent; MinimizeButton.ForeColor = TextMutedColor; }
     }
 
     protected override CreateParams CreateParams {
@@ -156,7 +164,7 @@ public class AdminWorksForm : Form {
             if (!_trackingMouse) {
                 NativeMethods.TRACKMOUSEEVENT tme = new NativeMethods.TRACKMOUSEEVENT();
                 tme.cbSize = Marshal.SizeOf(typeof(NativeMethods.TRACKMOUSEEVENT));
-                tme.dwFlags = 0x00000010 /* TME_NONCLIENT */ | 0x00000002 /* TME_LEAVE */;
+                tme.dwFlags = 0x00000010 | 0x00000002;
                 tme.hwndTrack = this.Handle;
                 NativeMethods.TrackMouseEvent(ref tme);
                 _trackingMouse = true;
@@ -164,8 +172,7 @@ public class AdminWorksForm : Form {
             int mx = unchecked((short)(long)m.LParam);
             int my = unchecked((short)((long)m.LParam >> 16));
             UpdateCaptionHover(new Point(mx, my));
-        }
-        else if (m.Msg == WM_NCMOUSELEAVE) {
+        } else if (m.Msg == WM_NCMOUSELEAVE) {
             _trackingMouse = false;
             ResetCaptionHover();
         }
@@ -173,12 +180,12 @@ public class AdminWorksForm : Form {
         if (m.Msg == WM_NCCALCSIZE && m.WParam != IntPtr.Zero) {
             if (this.WindowState == FormWindowState.Maximized) {
                 NativeMethods.NCCALCSIZE_PARAMS nsp = (NativeMethods.NCCALCSIZE_PARAMS)Marshal.PtrToStructure(m.LParam, typeof(NativeMethods.NCCALCSIZE_PARAMS));
-                Screen scr = Screen.FromHandle(this.Handle);
+                Screen scr = Screen.FromHandle(m.HWnd);
                 nsp.rgrc0.Left   = scr.WorkingArea.Left;
                 nsp.rgrc0.Top    = scr.WorkingArea.Top;
                 nsp.rgrc0.Right  = scr.WorkingArea.Right;
                 nsp.rgrc0.Bottom = scr.WorkingArea.Bottom;
-                Marshal.StructureToPtr(nsp, m.LParam, true);
+                Marshal.StructureToPtr(nsp, m.LParam, false);
             }
             m.Result = IntPtr.Zero;
             return;
@@ -189,46 +196,28 @@ public class AdminWorksForm : Form {
             int y = unchecked((short)((long)m.LParam >> 16));
             Point screenPt = new Point(x, y);
 
-            if (TitleSub != null && !TitleSub.IsDisposed && TitleSub.Visible) {
-                if (TitleSub.ClientRectangle.Contains(TitleSub.PointToClient(screenPt))) {
-                    m.Result = (IntPtr)1; // HTCLIENT
-                    return;
-                }
+            if (TitleSub != null && !TitleSub.IsDisposed && TitleSub.Visible && TitleSub.ClientRectangle.Contains(TitleSub.PointToClient(screenPt))) {
+                m.Result = (IntPtr)1; return;
             }
-            if (UpdateBadge != null && !UpdateBadge.IsDisposed && UpdateBadge.Visible) {
-                if (UpdateBadge.ClientRectangle.Contains(UpdateBadge.PointToClient(screenPt))) {
-                    m.Result = (IntPtr)1; // HTCLIENT
-                    return;
-                }
+            if (UpdateBadge != null && !UpdateBadge.IsDisposed && UpdateBadge.Visible && UpdateBadge.ClientRectangle.Contains(UpdateBadge.PointToClient(screenPt))) {
+                m.Result = (IntPtr)1; return;
             }
+
+            if (CloseButton != null && !CloseButton.IsDisposed && CloseButton.Visible && CloseButton.ClientRectangle.Contains(CloseButton.PointToClient(screenPt))) {
+                m.Result = (IntPtr)20; return;
+            }
+            if (MaximizeButton != null && !MaximizeButton.IsDisposed && MaximizeButton.Visible && MaximizeButton.ClientRectangle.Contains(MaximizeButton.PointToClient(screenPt))) {
+                m.Result = (IntPtr)9; return;
+            }
+            if (MinimizeButton != null && !MinimizeButton.IsDisposed && MinimizeButton.Visible && MinimizeButton.ClientRectangle.Contains(MinimizeButton.PointToClient(screenPt))) {
+                m.Result = (IntPtr)8; return;
+            }
+
             Point clientPt = this.PointToClient(screenPt);
-
-            if (CloseButton != null && !CloseButton.IsDisposed && CloseButton.Visible) {
-                if (CloseButton.ClientRectangle.Contains(CloseButton.PointToClient(screenPt))) {
-                    m.Result = (IntPtr)20; // HTCLOSE
-                    return;
-                }
-            }
-            if (MaximizeButton != null && !MaximizeButton.IsDisposed && MaximizeButton.Visible) {
-                if (MaximizeButton.ClientRectangle.Contains(MaximizeButton.PointToClient(screenPt))) {
-                    m.Result = (IntPtr)9; // HTMAXBUTTON (Windows 11 Snap Layouts)
-                    return;
-                }
-            }
-            if (MinimizeButton != null && !MinimizeButton.IsDisposed && MinimizeButton.Visible) {
-                if (MinimizeButton.ClientRectangle.Contains(MinimizeButton.PointToClient(screenPt))) {
-                    m.Result = (IntPtr)8; // HTMINBUTTON
-                    return;
-                }
-            }
-
             if (this.WindowState == FormWindowState.Normal) {
                 int b = 6;
-                bool left   = clientPt.X <= b;
-                bool right  = clientPt.X >= this.ClientSize.Width - b;
-                bool top    = clientPt.Y <= b;
-                bool bottom = clientPt.Y >= this.ClientSize.Height - b;
-
+                bool left   = clientPt.X <= b, right  = clientPt.X >= this.ClientSize.Width - b;
+                bool top    = clientPt.Y <= b, bottom = clientPt.Y >= this.ClientSize.Height - b;
                 if (top && left)     { m.Result = (IntPtr)13; return; }
                 if (top && right)    { m.Result = (IntPtr)14; return; }
                 if (bottom && left)  { m.Result = (IntPtr)16; return; }
@@ -239,18 +228,11 @@ public class AdminWorksForm : Form {
                 if (bottom)          { m.Result = (IntPtr)15; return; }
             }
 
-            if (SearchPill != null && !SearchPill.IsDisposed && SearchPill.Visible) {
-                if (SearchPill.ClientRectangle.Contains(SearchPill.PointToClient(screenPt))) {
-                    m.Result = (IntPtr)1; // HTCLIENT
-                    return;
-                }
+            if (SearchPill != null && !SearchPill.IsDisposed && SearchPill.Visible && SearchPill.ClientRectangle.Contains(SearchPill.PointToClient(screenPt))) {
+                m.Result = (IntPtr)1; return;
             }
-
-            if (HeaderControl != null && !HeaderControl.IsDisposed) {
-                if (HeaderControl.ClientRectangle.Contains(HeaderControl.PointToClient(screenPt))) {
-                    m.Result = (IntPtr)2; // HTCAPTION (Aero Snap & Header Drag)
-                    return;
-                }
+            if (HeaderControl != null && !HeaderControl.IsDisposed && HeaderControl.ClientRectangle.Contains(HeaderControl.PointToClient(screenPt))) {
+                m.Result = (IntPtr)2; return;
             }
         }
 
@@ -262,19 +244,10 @@ public class AdminWorksForm : Form {
             int hit = m.WParam.ToInt32();
             if (hit == 9) {
                 this.WindowState = (this.WindowState == FormWindowState.Maximized) ? FormWindowState.Normal : FormWindowState.Maximized;
-                m.Result = IntPtr.Zero;
-                return;
+                m.Result = IntPtr.Zero; return;
             }
-            if (hit == 8) {
-                this.WindowState = FormWindowState.Minimized;
-                m.Result = IntPtr.Zero;
-                return;
-            }
-            if (hit == 20) {
-                this.Close();
-                m.Result = IntPtr.Zero;
-                return;
-            }
+            if (hit == 8) { this.WindowState = FormWindowState.Minimized; m.Result = IntPtr.Zero; return; }
+            if (hit == 20) { this.Close(); m.Result = IntPtr.Zero; return; }
         }
 
         base.WndProc(ref m);
@@ -283,15 +256,13 @@ public class AdminWorksForm : Form {
 
 public class Win11ToggleSwitch : Control {
     private bool _checked = false;
-    private bool _isHovered = false;
-    private bool _isPressed = false;
+    private bool _isHovered = false, _isPressed = false;
     public string OnText { get; set; }
     public string OffText { get; set; }
     public Color AccentColor { get; set; }
     public Color OffFillColor { get; set; }
     public Color OffBorderColor { get; set; }
     public Color KnobColor { get; set; }
-
     public event EventHandler CheckedChanged;
 
     public bool Checked {
@@ -306,10 +277,7 @@ public class Win11ToggleSwitch : Control {
     }
 
     public void SetCheckedSilently(bool val) {
-        if (_checked != val) {
-            _checked = val;
-            this.Invalidate();
-        }
+        if (_checked != val) { _checked = val; this.Invalidate(); }
     }
 
     public Win11ToggleSwitch() {
@@ -328,32 +296,11 @@ public class Win11ToggleSwitch : Control {
         this.Font = new Font("Segoe UI Variable Text", 8f, FontStyle.Bold);
     }
 
-    protected override void OnMouseEnter(EventArgs e) {
-        _isHovered = true;
-        this.Invalidate();
-        base.OnMouseEnter(e);
-    }
-
-    protected override void OnMouseLeave(EventArgs e) {
-        _isHovered = false;
-        _isPressed = false;
-        this.Invalidate();
-        base.OnMouseLeave(e);
-    }
-
-    protected override void OnMouseDown(MouseEventArgs e) {
-        if (e.Button == MouseButtons.Left) {
-            _isPressed = true;
-            this.Invalidate();
-        }
-        base.OnMouseDown(e);
-    }
-
+    protected override void OnMouseEnter(EventArgs e) { _isHovered = true; this.Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { _isHovered = false; _isPressed = false; this.Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnMouseDown(MouseEventArgs e) { if (e.Button == MouseButtons.Left) { _isPressed = true; this.Invalidate(); } base.OnMouseDown(e); }
     protected override void OnMouseUp(MouseEventArgs e) {
-        if (_isPressed && e.Button == MouseButtons.Left) {
-            _isPressed = false;
-            Checked = !Checked;
-        }
+        if (_isPressed && e.Button == MouseButtons.Left) { _isPressed = false; Checked = !Checked; }
         base.OnMouseUp(e);
     }
 
@@ -362,43 +309,25 @@ public class Win11ToggleSwitch : Control {
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.PixelOffsetMode = PixelOffsetMode.HighQuality;
 
-        int pillW = 40;
-        int pillH = 20;
-        int pillY = (this.Height - pillH) / 2;
-        int pillX = 2;
-
-        GraphicsPath path = new GraphicsPath();
-        path.AddArc(pillX, pillY, pillH, pillH, 90, 180);
-        path.AddArc(pillX + pillW - pillH, pillY, pillH, pillH, 270, 180);
-        path.CloseFigure();
-
-        if (_checked) {
-            Color fill = _isHovered ? Color.FromArgb(25, 135, 230) : this.AccentColor;
-            if (_isPressed) fill = Color.FromArgb(0, 105, 190);
-            using (SolidBrush b = new SolidBrush(fill)) {
-                g.FillPath(b, path);
-            }
-            int knobD = 14;
-            int knobX = _isPressed ? pillX + pillW - knobD - 2 : pillX + pillW - knobD - 3;
-            int knobY = pillY + (pillH - knobD) / 2;
-            using (SolidBrush kb = new SolidBrush(this.KnobColor)) {
-                g.FillEllipse(kb, knobX, knobY, knobD, knobD);
-            }
-        } else {
-            Color fill = _isHovered ? Color.FromArgb(40, 46, 58) : this.OffFillColor;
-            using (SolidBrush b = new SolidBrush(fill)) {
-                g.FillPath(b, path);
-            }
-            Color border = _isHovered ? Color.FromArgb(120, 130, 155) : this.OffBorderColor;
-            using (Pen p = new Pen(border, 1.2f)) {
-                g.DrawPath(p, path);
-            }
-            int knobD = 12;
-            int knobX = _isPressed ? pillX + 6 : pillX + 4;
-            int knobY = pillY + (pillH - knobD) / 2;
-            Color knobC = _isHovered ? Color.White : Color.FromArgb(180, 190, 205);
-            using (SolidBrush kb = new SolidBrush(knobC)) {
-                g.FillEllipse(kb, knobX, knobY, knobD, knobD);
+        int pillW = 40, pillH = 20, pillY = (this.Height - pillH) / 2, pillX = 2;
+        using (GraphicsPath path = Win11Drawing.GetRoundPath(new Rectangle(pillX, pillY, pillW, pillH), pillH / 2)) {
+            if (_checked) {
+                Color fill = _isPressed ? Color.FromArgb(0, 105, 190) : (_isHovered ? Color.FromArgb(25, 135, 230) : this.AccentColor);
+                using (SolidBrush b = new SolidBrush(fill)) { g.FillPath(b, path); }
+                int knobD = 14;
+                int knobX = _isPressed ? pillX + pillW - knobD - 2 : pillX + pillW - knobD - 3;
+                int knobY = pillY + (pillH - knobD) / 2;
+                using (SolidBrush kb = new SolidBrush(this.KnobColor)) { g.FillEllipse(kb, knobX, knobY, knobD, knobD); }
+            } else {
+                Color fill = _isHovered ? Color.FromArgb(40, 46, 58) : this.OffFillColor;
+                using (SolidBrush b = new SolidBrush(fill)) { g.FillPath(b, path); }
+                Color border = _isHovered ? Color.FromArgb(120, 130, 155) : this.OffBorderColor;
+                using (Pen p = new Pen(border, 1.2f)) { g.DrawPath(p, path); }
+                int knobD = 12;
+                int knobX = _isPressed ? pillX + 6 : pillX + 4;
+                int knobY = pillY + (pillH - knobD) / 2;
+                Color knobC = _isHovered ? Color.White : Color.FromArgb(180, 190, 205);
+                using (SolidBrush kb = new SolidBrush(knobC)) { g.FillEllipse(kb, knobX, knobY, knobD, knobD); }
             }
         }
 
@@ -406,10 +335,7 @@ public class Win11ToggleSwitch : Control {
         Color textC = _checked ? Color.FromArgb(240, 245, 255) : Color.FromArgb(160, 168, 182);
         using (SolidBrush tb = new SolidBrush(textC)) {
             Rectangle textRect = new Rectangle(pillX + pillW + 8, 0, this.Width - (pillX + pillW + 8), this.Height);
-            StringFormat sf = new StringFormat {
-                LineAlignment = StringAlignment.Center,
-                Alignment = StringAlignment.Near
-            };
+            StringFormat sf = new StringFormat { LineAlignment = StringAlignment.Center, Alignment = StringAlignment.Near };
             g.DrawString(text, this.Font, tb, textRect, sf);
         }
     }
@@ -439,37 +365,15 @@ public class Win11CardPanel : Panel {
         if (e.Control != null && !(e.Control is Button) && !(e.Control is Win11ToggleSwitch) && !(e.Control is Win11Button)) {
             e.Control.MouseEnter += (s, ev) => { if (!IsHovered) { IsHovered = true; this.Invalidate(); } };
             e.Control.MouseLeave += (s, ev) => {
-                Point p = this.PointToClient(Cursor.Position);
-                if (!this.ClientRectangle.Contains(p)) {
-                    IsHovered = false;
-                    this.Invalidate();
+                if (!this.ClientRectangle.Contains(this.PointToClient(System.Windows.Forms.Cursor.Position))) {
+                    IsHovered = false; this.Invalidate();
                 }
             };
         }
     }
 
-    private GraphicsPath GetRoundPath(Rectangle r, int radius) {
-        GraphicsPath path = new GraphicsPath();
-        int d = radius * 2;
-        path.AddArc(r.X, r.Y, d, d, 180, 90);
-        path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
-        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
-        path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
-        path.CloseFigure();
-        return path;
-    }
-
-    protected override void OnMouseEnter(EventArgs e) {
-        IsHovered = true;
-        this.Invalidate();
-        base.OnMouseEnter(e);
-    }
-
-    protected override void OnMouseLeave(EventArgs e) {
-        IsHovered = false;
-        this.Invalidate();
-        base.OnMouseLeave(e);
-    }
+    protected override void OnMouseEnter(EventArgs e) { IsHovered = true; this.Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { IsHovered = false; this.Invalidate(); base.OnMouseLeave(e); }
 
     protected override void OnPaint(PaintEventArgs e) {
         Graphics g = e.Graphics;
@@ -477,11 +381,9 @@ public class Win11CardPanel : Panel {
         g.PixelOffsetMode = PixelOffsetMode.HighQuality;
 
         Rectangle rect = new Rectangle(0, 0, this.Width - 1, this.Height - 1);
-        using (GraphicsPath path = GetRoundPath(rect, this.BorderRadius)) {
+        using (GraphicsPath path = Win11Drawing.GetRoundPath(rect, this.BorderRadius)) {
             Color bg = IsHovered ? HoverBackColor : NormalBackColor;
-            using (SolidBrush b = new SolidBrush(bg)) {
-                g.FillPath(b, path);
-            }
+            using (SolidBrush b = new SolidBrush(bg)) { g.FillPath(b, path); }
 
             using (LinearGradientBrush topHighlight = new LinearGradientBrush(
                 new Point(0, 0), new Point(0, 4),
@@ -494,9 +396,7 @@ public class Win11CardPanel : Panel {
             }
 
             Color bc = IsHovered ? HoverBorderColor : BorderColor;
-            using (Pen p = new Pen(bc, 1)) {
-                g.DrawPath(p, path);
-            }
+            using (Pen p = new Pen(bc, 1)) { g.DrawPath(p, path); }
         }
     }
 }
@@ -511,8 +411,7 @@ public class Win11Button : Button {
     public Color NormalBorderColor { get; set; }
     public Color HoverBorderColor { get; set; }
 
-    private bool _isHovered = false;
-    private bool _isPressed = false;
+    private bool _isHovered = false, _isPressed = false;
 
     public Win11Button() {
         this.SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
@@ -532,43 +431,10 @@ public class Win11Button : Button {
         this.ForeColor = Color.FromArgb(240, 245, 252);
     }
 
-    private GraphicsPath GetRoundPath(Rectangle r, int radius) {
-        GraphicsPath path = new GraphicsPath();
-        int d = radius * 2;
-        path.AddArc(r.X, r.Y, d, d, 180, 90);
-        path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
-        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
-        path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
-        path.CloseFigure();
-        return path;
-    }
-
-    protected override void OnMouseEnter(EventArgs e) {
-        _isHovered = true;
-        this.Invalidate();
-        base.OnMouseEnter(e);
-    }
-
-    protected override void OnMouseLeave(EventArgs e) {
-        _isHovered = false;
-        _isPressed = false;
-        this.Invalidate();
-        base.OnMouseLeave(e);
-    }
-
-    protected override void OnMouseDown(MouseEventArgs e) {
-        if (e.Button == MouseButtons.Left) {
-            _isPressed = true;
-            this.Invalidate();
-        }
-        base.OnMouseDown(e);
-    }
-
-    protected override void OnMouseUp(MouseEventArgs e) {
-        _isPressed = false;
-        this.Invalidate();
-        base.OnMouseUp(e);
-    }
+    protected override void OnMouseEnter(EventArgs e) { _isHovered = true; this.Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { _isHovered = false; _isPressed = false; this.Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnMouseDown(MouseEventArgs e) { if (e.Button == MouseButtons.Left) { _isPressed = true; this.Invalidate(); } base.OnMouseDown(e); }
+    protected override void OnMouseUp(MouseEventArgs e) { _isPressed = false; this.Invalidate(); base.OnMouseUp(e); }
 
     protected override void OnPaint(PaintEventArgs e) {
         Graphics g = e.Graphics;
@@ -576,37 +442,21 @@ public class Win11Button : Button {
         g.PixelOffsetMode = PixelOffsetMode.HighQuality;
 
         Rectangle rect = new Rectangle(0, 0, this.Width - 1, this.Height - 1);
-        using (GraphicsPath path = GetRoundPath(rect, this.CornerRadius)) {
-            Color bg;
-            Color border;
-            Color fg = this.ForeColor;
-
+        using (GraphicsPath path = Win11Drawing.GetRoundPath(rect, this.CornerRadius)) {
+            Color bg, border, fg = this.ForeColor;
             if (!this.Enabled) {
-                bg = Color.FromArgb(24, 28, 36);
-                border = Color.FromArgb(42, 48, 62);
-                fg = Color.FromArgb(105, 115, 130);
+                bg = Color.FromArgb(24, 28, 36); border = Color.FromArgb(42, 48, 62); fg = Color.FromArgb(105, 115, 130);
             } else if (IsAccent) {
-                if (_isPressed) bg = Color.FromArgb(0, 95, 175);
-                else if (_isHovered) bg = Color.FromArgb(25, 135, 235);
-                else bg = this.AccentColor;
-                border = Color.FromArgb(80, 165, 255);
-                fg = Color.White;
+                bg = _isPressed ? Color.FromArgb(0, 95, 175) : (_isHovered ? Color.FromArgb(25, 135, 235) : this.AccentColor);
+                border = Color.FromArgb(80, 165, 255); fg = Color.White;
             } else {
-                if (_isPressed) bg = PressedBackColor;
-                else if (_isHovered) bg = HoverBackColor;
-                else bg = NormalBackColor;
+                bg = _isPressed ? PressedBackColor : (_isHovered ? HoverBackColor : NormalBackColor);
                 border = _isHovered ? HoverBorderColor : NormalBorderColor;
             }
 
-            using (SolidBrush b = new SolidBrush(bg)) {
-                g.FillPath(b, path);
-            }
-            using (Pen p = new Pen(border, 1)) {
-                g.DrawPath(p, path);
-            }
-
-            TextRenderer.DrawText(g, this.Text, this.Font, rect, fg,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+            using (SolidBrush b = new SolidBrush(bg)) { g.FillPath(b, path); }
+            using (Pen p = new Pen(border, 1)) { g.DrawPath(p, path); }
+            TextRenderer.DrawText(g, this.Text, this.Font, rect, fg, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
         }
     }
 }
@@ -619,10 +469,7 @@ public class Win11ProgressBar : Control {
         get { return _val; }
         set {
             int clamped = Math.Max(0, Math.Min(100, value));
-            if (_val != clamped) {
-                _val = clamped;
-                this.Invalidate();
-            }
+            if (_val != clamped) { _val = clamped; this.Invalidate(); }
         }
     }
 
@@ -640,16 +487,10 @@ public class Win11ProgressBar : Control {
 
         int h = this.Height;
         Rectangle trackRect = new Rectangle(0, 0, this.Width, h);
-        using (SolidBrush tb = new SolidBrush(TrackColor)) {
-            g.FillRectangle(tb, trackRect);
-        }
-
+        using (SolidBrush tb = new SolidBrush(TrackColor)) { g.FillRectangle(tb, trackRect); }
         if (_val > 0) {
-            int fillW = Math.Max(h, (int)(this.Width * (_val / 100.0f)));
-            fillW = Math.Min(this.Width, fillW);
-            using (SolidBrush fb = new SolidBrush(FillColor)) {
-                g.FillRectangle(fb, new Rectangle(0, 0, fillW, h));
-            }
+            int fillW = Math.Min(this.Width, Math.Max(h, (int)(this.Width * (_val / 100.0f))));
+            using (SolidBrush fb = new SolidBrush(FillColor)) { g.FillRectangle(fb, new Rectangle(0, 0, fillW, h)); }
         }
     }
 }
@@ -922,12 +763,12 @@ $BtnToggleDrawer.Add_Click({
 })
 $TermBtnContainer.Controls.Add($BtnToggleDrawer)
 
-New-TermBtn "EXPORT" { 
+New-TermBtn "EXPORT" {
     $Path = Join-Path (Get-UserDesktopPath) "AdminWorks_Log_$((Get-Date).ToString('yyyy-MM-dd_HHmmss')).txt"
     ($LogBox.Text) | Out-File -FilePath $Path -Encoding UTF8
     Write-Log "Log exported to: $Path" "Success"
 }
-New-TermBtn "COPY ALL" { 
+New-TermBtn "COPY ALL" {
     if ($LogBox.Text.Trim()) { [System.Windows.Forms.Clipboard]::SetText($LogBox.Text); Write-Log "Console copied." "Success" }
 }
 New-TermBtn "CLEAR" { $LogBox.Clear(); Write-Log "Console cleared." "Info" }
@@ -977,7 +818,7 @@ function New-StatWidget($IconGlyph, $Title) {
     $LIcon = New-Object System.Windows.Forms.Label -Property @{ Text = $IconGlyph; Location = New-Object System.Drawing.Point(10, 8); Size = New-Object System.Drawing.Size(18, 16); ForeColor = $script:Theme.AccentGlow; Font = New-Object System.Drawing.Font($IconFont, 8.5); UseMnemonic = $false }
     $LTitle = New-Object System.Windows.Forms.Label -Property @{ Text = $Title; Location = New-Object System.Drawing.Point(32, 8); AutoSize = $true; ForeColor = $script:Theme.TextMuted; Font = New-Object System.Drawing.Font($GlobalFont, 7, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false }
     $LVal = New-Object System.Windows.Forms.Label -Property @{ Text = "--"; Location = New-Object System.Drawing.Point(32, 24); AutoSize = $true; ForeColor = $script:Theme.TextMain; Font = New-Object System.Drawing.Font($GlobalFont, 9, [System.Drawing.FontStyle]::Bold); UseMnemonic = $false }
-    
+
     $Meter = New-Object Win11ProgressBar -Property @{ Dock = "Bottom"; Height = 4; TrackColor = [System.Drawing.Color]::FromArgb(35, 44, 62); FillColor = $script:Theme.Accent }
     $LVal | Add-Member -MemberType NoteProperty -Name "Meter" -Value $Meter -Force
     $P.Controls.AddRange(@($LIcon, $LTitle, $LVal, $Meter))
@@ -1015,8 +856,8 @@ function Update-ResponsiveLayout {
     }
     $targetWidth = [math]::Max(280, $targetWidth)
     $activePanel = $script:CategoryPanels[$script:CurrentTabId]
-    if ($activePanel) { 
-        $activePanel.SuspendLayout() 
+    if ($activePanel) {
+        $activePanel.SuspendLayout()
         $activePanel.HorizontalScroll.Enabled = $false; $activePanel.HorizontalScroll.Visible = $false; $activePanel.HorizontalScroll.Maximum = 0
         foreach ($ctrl in $activePanel.Controls) {
             if ($ctrl -is [System.Windows.Forms.Panel] -or $ctrl -is [Win11CardPanel]) {
@@ -1225,7 +1066,7 @@ function New-ToggleCard ($CategoryPanel, $IconGlyph, $Title, $CategoryTag, $Desc
         AccentColor = $script:Theme.Accent; OffFillColor = $script:Theme.SidebarActive
         OffBorderColor = $script:Theme.CardBorder
     }
-    
+
     $ToggleMeta = [PSCustomObject]@{
         Control = $Toggle
         CheckAction = $CheckAction
@@ -1285,7 +1126,7 @@ function Select-Tab($TargetId) {
     $SearchBox.ForeColor = $script:Theme.TextSubtle
     foreach ($k in $script:CategoryPanels.Keys) { $script:CategoryPanels[$k].Visible = ($k -eq $TargetId) }
     foreach ($card in $script:AllCards) { $card.Panel.Visible = $true }
-    foreach ($item in $script:SidebarItems.Values) { 
+    foreach ($item in $script:SidebarItems.Values) {
         $item.Panel.BackColor = $script:Theme.Sidebar
         $item.Indicator.Visible = $false
         $item.Icon.ForeColor = $script:Theme.TextMuted
@@ -1507,7 +1348,7 @@ New-TweakCard $P_Maint $UI.Refresh "Rebuild Windows Search Index" "Search Fix" "
 $P_Perf = $script:CategoryPanels["Perf"]
 New-TweakCard $P_Perf $UI.Perf "Ultimate Power Plan" "Power Scheme" "Unlocks and activates the hidden Windows Ultimate Performance power plan." {
     Set-PowerSchemeUltimate
-    Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value "0" 
+    Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value "0"
     Write-Log "Ultimate Performance power plan applied." "Success"
 }
 New-TweakCard $P_Perf $UI.Sparkle "Visual Responsiveness" "UI Boost" "Disables window animations, fading effects, and acrylic transparency for max FPS without clobbering font smoothing." {
@@ -2194,5 +2035,16 @@ function Start-UpdateCheckAsync {
 
 Write-Log "AdminWorks Pro Suite v$($script:AppVersion) loaded and ready." "Success"
 Start-UpdateCheckAsync
-[void]$Form.ShowDialog()
+try {
+    [void]$Form.ShowDialog()
+} catch {
+    [System.Windows.Forms.MessageBox]::Show(
+        "A fatal UI error occurred while running AdminWorks:`n`n$($_.Exception.Message)`n`n$($_.ScriptStackTrace)",
+        "AdminWorks Pro - Runtime Error",
+        [System.Windows.Forms.MessageBoxButtons]::OK,
+        [System.Windows.Forms.MessageBoxIcon]::Error
+    ) | Out-Null
+} finally {
+    if ($Form -and -not $Form.IsDisposed) { $Form.Dispose() }
+}
 
